@@ -1,19 +1,19 @@
 {
-    "name": "environment-safe-template",
+    "name": "automaton-mocha-test",
     "version": "0.0.1",
     "main": "dist/index.cjs",
     "module": "src/index.mjs",
-    "homepage": "https://github.com/khrome/environment-safe-template",
-    "description": "A template for buildless module development",
+    "homepage": "null",
+    "description": "null",
     "keywords": [],
-    "author": "Abbey Hawk Sparrow <@khrome> (http://patternweaver.com)",
+    "author": "null <null>()",
     "contributors": [],
     "repository": {
-          "type": "git",
-          "url": "git@github.com:khrome/environment-safe-template.git"
-     },
+        "type": "git",
+        "url": "null"
+    },
     "bugs": {
-          "url": "https://github.com/khrome/environment-safe-template/issues"
+        "url": "null"
     },
     "license": "MIT",
     "devDependencies": {
