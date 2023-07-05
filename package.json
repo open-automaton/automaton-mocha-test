@@ -6,7 +6,7 @@
     "homepage": "null",
     "description": "null",
     "keywords": [],
-    "author": "null <null>()",
+    "author": "Abbey Hawk Sparrow<null>()",
     "contributors": [],
     "repository": {
         "type": "git",
@@ -14,6 +14,14 @@
     },
     "bugs": {
         "url": "null"
+    },
+    "type": "module",
+    "bin": {
+        "mocha-automaton": "./bin/mocha-automaton.mjs",
+        "moka": "./bin/mocha-automaton.mjs"
+    },
+    "mocha-automaton": {
+        "firefox": {}
     },
     "license": "MIT",
     "devDependencies": {
@@ -23,13 +31,12 @@
         "babel-plugin-search-and-replace": "^1.1.1",
         "babel-plugin-transform-import-meta": "^2.2.0",
         "chai": "^4.3.7",
-        "environment-safe-chai": "^0.0.1",
+        "environment-safe-chai": "^0.1.0",
         "eslint": "^8.43.0",
         "husky": "^8.0.3",
         "jsdoc": "^3.6.11",
         "jsdoc-to-markdown": "^8.0.0",
         "mocha": "^10.2.0",
-        "mocha-chrome": "^2.2.0",
         "tsd-jsdoc": "^2.5.0"
     },
     "scripts": {
@@ -46,6 +53,17 @@
         "prepare": "husky install"
     },
     "dependencies": {
-        "browser-or-node": "^2.1.1"
+        "@open-automaton/automaton": "^0.0.12",
+        "@open-automaton/cheerio-mining-engine": "^0.0.8",
+        "@open-automaton/jsdom-mining-engine": "^0.0.1",
+        "@open-automaton/playwright-mining-engine": "^0.0.9",
+        "@open-automaton/puppeteer-mining-engine": "^0.0.8",
+        "browser-or-node": "^2.1.1",
+        "environment-safe-console-intercept": "^0.1.0",
+        "environment-safe-import-introspect": "^0.0.1",
+        "environment-safe-package": "^0.0.3",
+        "express": "^4.18.2",
+        "why-is-node-running": "^2.2.2",
+        "yargs": "^17.7.2"
     }
 }
