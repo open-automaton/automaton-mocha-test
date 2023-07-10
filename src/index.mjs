@@ -6,7 +6,8 @@ let internalRequire = null;
 if(typeof require !== 'undefined') internalRequire = require;
 const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRequire(import.meta.url));
 //*/
-import { test} from './mocha.mjs';
+import { isBrowser, isJsDom } from 'browser-or-node';
+import { test, testRemote } from './mocha.mjs';
 /**
  * A JSON object
  * @typedef { object } JSON
@@ -15,10 +16,18 @@ import { test} from './mocha.mjs';
 export const it = (str, fn)=>{
     const description = (typeof str === 'string' )?str:'';
     const handler = (typeof str === 'function' )?str:fn;
-    if(description.indexOf(':') !== -1){
-        return itRemotely(description, handler);
+    const caller = (new Error()).stack.split('\n')[1].split('//').slice(-1)[0].split(':')[0];
+    if(isBrowser || isJsDom){
+        //console.log('BROWSER', window.it, description, handler);
+        window.it(description, handler);
     }else{
-        return test(description, handler);
+        if(description.indexOf(':') !== -1){
+            //console.log('REMOTE');
+            return itRemotely(description, handler, { caller });
+        }else{
+            //console.log('LOCAL');
+            return test(description, handler);
+        }
     }
 };
 
@@ -34,11 +43,6 @@ export const hashString = (str)=>{
     return theHash;
 };
 
-export const itRemotely = (str, fn)=>{
-    /*const description = (typeof str === 'string' )?str:'';
-    const handler = (typeof str === 'function' )?str:fn;
-    const caller = (new Error()).stack.split("\n")[1].split('//').slice(-1)[0].split(':')[0];
-    if(description.indexOf(':') !== -1){
-        
-    }*/
+export const itRemotely = (description, handler, options)=>{
+    return testRemote(description, handler, options);
 };

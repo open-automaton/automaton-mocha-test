@@ -13,7 +13,9 @@ const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRe
  * @typedef { object } JSON
  */
  
-import * as express from 'express';
+import express from 'express';
+import * as mod from 'module';
+let require = null;
 
 /*const fnToMochaTestBody = function(desc, fn){
      var body = fn.toString();
@@ -55,48 +57,66 @@ const fnsToMochaTest = function(desc, fns, wrapInContext){
 export const generateTestBody = (description, testLogicFn)=>{
     return ''+fnsToMochaTestBody(description, [testLogicFn])+'';
 };
-export const launchTestServer = (dir, port=8084)=>{
+export const launchTestServer = (dir, port=8084, map)=>{
     const app = express();
     
-    app.get('/', (req, res)=>{
-        
+    app.get('/test/index.html', async (req, res)=>{
+        try{
+            const html = await testHTML(
+                '<script type="module" src="/test/test.mjs"></script>',
+                {map}
+            );
+            res.send(html);
+        }catch(ex){
+            console.log(ex);   
+        }
     });
-    
-    app.listen(port);
+    return new Promise((resolve, reject)=>{
+        const server = app.listen(port, (err)=>{
+            if(err) reject(err);
+            else resolve(server);
+        });
+    });
 };
 export const createDependencies = async (options={})=>{
     //const mode = options.mode || 'modules';
 };
-export const testHTML = async (description, testLogicFn, options={})=>{
-    const test = generateTestBody(description, testLogicFn);
+export const testHTML = async (testTag, options={})=>{
+    //const testTag = generateTestBody(description, testLogicFn);
     const dependencies = await createDependencies({
         package: options.package,
         mode: options.mode
     });
     //const packageLocation = options.package || './package.json';
-    const mochaUrl = options.mocha || 'https://cdn.rawgit.com/mochajs/mocha/2.2.5/mocha.js';
-    const chaiUrl = options.mocha || 'https://cdn.rawgit.com/mochajs/mocha/2.2.5/mocha.js';
+    const mochaLink = options.mocha || '<link rel="stylesheet" href="../node_modules/mocha/mocha.css">';
+    const mochaUrl = options.mocha || '/node_modules/mocha/mocha.js';
     const testLibs = options.testLibs ||`
         <div id="mocha"></div>
-        <script src="${mochaUrl}"></script>
-        <script src="${chaiUrl}"></script>`;
+        <script src="${mochaUrl}"></script>`;
     const init = options.init || `
-        <script>
+        <script type="module">
             mocha.checkLeaks();
             mocha.globals([]);
             mocha.run();
         </script>
     `;
-    const script = '<script>mocha.setup({ui:\'bdd\', reporter: \'json-stream\'})</script>';
+    const script = options.headless?
+        '<script>mocha.setup({ui:\'bdd\', reporter: \'json-stream\'})</script>':
+        '<script>mocha.setup(\'bdd\')</script>';
+    //TODO: support test extraction
+    const mapIndent = '                ';
     const html = `
         <html>
             <head>
+                <title>Moka Tests</title>
+                ${mochaLink}
+                ${options.map.replace(/\n/g, '\n'+mapIndent) || ''}
             </head>
             <body>
                 ${testLibs}
-                ${dependencies}
-                ${ options.testLibs || script }
-                ${test}
+                ${dependencies || ''}
+                ${ options.testLibs || script || '' }
+                ${testTag}
                 ${init}
             </body>
         <html>
@@ -106,12 +126,78 @@ export const testHTML = async (description, testLogicFn, options={})=>{
 
 export const test = (description, testLogicFn, clean)=>{
     let fn;
+    let decoratedDescription = `🏠 ${description}`;
     if(clean){
         //context free (safe for isolated execution)
-        const body = generateTestBody(description, testLogicFn);
+        const body = generateTestBody(decoratedDescription, testLogicFn);
         fn = new Function(body);
         fn();
     }else{
-        fnsToMochaTest(description, [testLogicFn]);
+        fnsToMochaTest(decoratedDescription, [testLogicFn]);
+    }
+};
+
+const remotes = {};
+const engines = {};
+export const registerRemote = (name, engineName, options={})=>{
+    if(!require) require = mod.createRequire(import.meta.url);
+    if(!engines[engineName]) engines[engineName] = require(engineName);
+    const instance = new engines[engineName](options);
+    remotes[name] = instance;
+};
+
+const defaultPort = 8080;
+let nextPort = defaultPort;
+
+export const getTestURL = (options)=>{
+    const url = `http://${
+        options.host || 'localhost'
+    }:${
+        options.port || defaultPort
+    }/test/index.html?script=${
+        options.caller || 'test/test.mjs'
+    }&grep=${
+        options.description?
+            encodeURIComponent(options.description):
+            ''
+    }`;
+    return url;
+};
+
+export const testRemote = (desc, testLogicFn, options)=>{
+    try{
+        const caller = options.caller.split('/automaton-mocha-test/').pop();
+        const parts = desc.split(':');
+        const description = parts.pop();
+        const remoteName = parts.shift();
+        let port = parts.shift() || defaultPort;
+        if( port.toString().trim() === '++' ){
+            port = nextPort++;
+        }
+        it(`🌎 ${description}`, async function(){
+            this.timeout(10000); //10s default
+            const server = await launchTestServer('./', port);
+            if(!remotes[remoteName]){
+                throw new Error(`Remote '${remoteName}' was not found!`);
+            }
+            const url = getTestURL({port, caller, description: desc});
+            //console.log(remotes[remoteName])
+            const result = await new Promise((resolve, reject)=>{
+                remotes[remoteName].fetch({ url }, (err, data)=>{
+                    let match = null;
+                    if(err && typeof err === 'string' && (match = err.match(/<pre>.*<\/pre>/g))){
+                        match = match[0].replace('<pre>', '').replace('</pre>', '');
+                        const error = new Error(`🌎 ${match}`);
+                        error.stack = 'Remote execution environment:?';
+                        return reject(error);
+                    }
+                    resolve(data);
+                    server.close();
+                });
+            });
+            console.log('>>>', result);
+        });
+    }catch(ex){
+        console.log(ex);
     }
 };

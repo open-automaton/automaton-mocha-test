@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.itRemotely = exports.it = exports.hashString = void 0;
+var _browserOrNode = require("browser-or-node");
 var _mocha = require("./mocha.cjs");
 /*
 import { isBrowser, isJsDom } from 'browser-or-node';
@@ -22,10 +23,20 @@ const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRe
 const it = (str, fn) => {
   const description = typeof str === 'string' ? str : '';
   const handler = typeof str === 'function' ? str : fn;
-  if (description.indexOf(':') !== -1) {
-    return itRemotely(description, handler);
+  const caller = new Error().stack.split('\n')[1].split('//').slice(-1)[0].split(':')[0];
+  if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+    //console.log('BROWSER', window.it, description, handler);
+    window.it(description, handler);
   } else {
-    return (0, _mocha.test)(description, handler);
+    if (description.indexOf(':') !== -1) {
+      //console.log('REMOTE');
+      return itRemotely(description, handler, {
+        caller
+      });
+    } else {
+      //console.log('LOCAL');
+      return (0, _mocha.test)(description, handler);
+    }
   }
 };
 exports.it = it;
@@ -43,12 +54,7 @@ const hashString = str => {
   return theHash;
 };
 exports.hashString = hashString;
-const itRemotely = (str, fn) => {
-  /*const description = (typeof str === 'string' )?str:'';
-  const handler = (typeof str === 'function' )?str:fn;
-  const caller = (new Error()).stack.split("\n")[1].split('//').slice(-1)[0].split(':')[0];
-  if(description.indexOf(':') !== -1){
-      
-  }*/
+const itRemotely = (description, handler, options) => {
+  return (0, _mocha.testRemote)(description, handler, options);
 };
 exports.itRemotely = itRemotely;

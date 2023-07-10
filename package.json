@@ -20,8 +20,25 @@
         "mocha-automaton": "./bin/mocha-automaton.mjs",
         "moka": "./bin/mocha-automaton.mjs"
     },
-    "mocha-automaton": {
-        "firefox": {}
+    "moka": {
+        "firefox": {
+            "engine": "@open-automaton/playwright-mining-engine",
+            "options": { "type": "firefox" }
+        },
+        "chrome": {
+            "engine": "@open-automaton/playwright-mining-engine",
+            "options": { "type": "chromium" }
+        },
+        "safari": {
+            "engine": "@open-automaton/playwright-mining-engine",
+            "options": { "type": "webkit" }
+        },
+        "stub": "src/stub.mjs",
+        "stubs": [ "express", "module" ],
+        "shims" : {
+            "chai" : "node_modules/chai/chai.js",
+            "browser-or-node" : "node_modules/browser-or-node/src/index.js"
+        } 
     },
     "license": "MIT",
     "devDependencies": {
@@ -41,11 +58,14 @@
     },
     "scripts": {
         "lint": "./node_modules/.bin/eslint src/*.mjs test/*.mjs",
+        "test": "./bin/moka.mjs test/test.mjs",
         "import-test": "./node_modules/.bin/mocha test/test.mjs",
         "require-test": "./node_modules/.bin/mocha test/test.cjs",
         "build-commonjs": "./node_modules/.bin/babel src --out-dir dist --out-file-extension .cjs",
-        "headless-browser-test": "./node_modules/.bin/mocha-chrome test/headless.html --chrome-flags '[ \"--disable-web-security\", \"--disable-site-isolation-trials\", \"--allow-file-access-from-files\", \"--allow-insecure-localhost\", \"--allow-running-insecure-content\"]' --ignore-exceptions",
-        "browser-test": "open http://localhost:8000/test/browser.html; npx http-server -p 8000",
+        "headless-browser-test-old": "./node_modules/.bin/mocha-chrome test/headless.html --chrome-flags '[ \"--disable-web-security\", \"--disable-site-isolation-trials\", \"--allow-file-access-from-files\", \"--allow-insecure-localhost\", \"--allow-running-insecure-content\"]' --ignore-exceptions",
+        "headless-browser-test": "./bin/moka.mjs --server . --browser chrome --relaxed --prefix ../ test/test.mjs",
+        "browser-test": "./bin/moka.mjs --server . --local-browser --relaxed --prefix ../ test/test.mjs",
+        "browser-test-old": "open http://localhost:8000/test/browser.html; npx http-server -p 8000",
         "container-test": "docker build . -t environment-safe-package.json -f ./containers/test.dockerfile; docker logs --follow \"$(docker run -d environment-safe-package.json)\"",
         "generate-docs": "for i in src/*.mjs; do echo \"generating docs for: ${i}\";./node_modules/.bin/jsdoc2md -c .jsdoc.json \"${i}\" > \"docs/$(basename ${i%.mjs}).md\"; done",
         "generate-types": "for i in src/*.mjs; do echo \"generating types for: ${i}\"; ./node_modules/.bin/jsdoc -t node_modules/tsd-jsdoc/dist -c .jsdoc.json \"${i}\"; mv out/types.d.ts \"src/$(basename ${i%.mjs}).d.ts\"; done; rmdir out",
@@ -61,7 +81,7 @@
         "browser-or-node": "^2.1.1",
         "environment-safe-console-intercept": "^0.1.0",
         "environment-safe-import-introspect": "^0.0.1",
-        "environment-safe-package": "^0.0.3",
+        "environment-safe-package": "^0.0.4",
         "express": "^4.18.2",
         "why-is-node-running": "^2.2.2",
         "yargs": "^17.7.2"

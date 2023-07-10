@@ -1,9 +1,13 @@
 automaton-mocha-test
 ============================
-null
+A mocha test runner with additional functionality designed for native esmodule development across many environments using a single test suite and no boilerplate. It supports standard execution, executing a full suite in a remote (browser) environment, executing individual tests in the browser or scraper scripts to validate the final state of your HTML. 
+
+Best coupled with [environment-safe modules](https://github.com/environment-safe).
 
 Usage
 -----
+
+
 
 Testing
 -------
