@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.itRemotely = exports.it = exports.hashString = void 0;
+exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.hashString = void 0;
 var _browserOrNode = require("browser-or-node");
 var _mocha = require("./mocha.cjs");
 /*
@@ -20,22 +20,58 @@ const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRe
  * @typedef { object } JSON
  */
 
+let isReciever = false;
+let waiting = {};
+const setReciever = handle => {
+  isReciever = handle;
+};
+exports.setReciever = setReciever;
+const mochaEventHandler = (type, event) => {
+  switch (type) {
+    case 'pass':
+      if (waiting[event.title]) {
+        const handle = waiting[event.title];
+        delete waiting[event.title];
+        handle.resolve();
+      } else {
+        console.log('unknown event', type, event);
+      }
+      break;
+    case 'start':
+    case 'end':
+  }
+};
+exports.mochaEventHandler = mochaEventHandler;
 const it = (str, fn) => {
   const description = typeof str === 'string' ? str : '';
   const handler = typeof str === 'function' ? str : fn;
   const caller = new Error().stack.split('\n')[1].split('//').slice(-1)[0].split(':')[0];
-  if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
-    //console.log('BROWSER', window.it, description, handler);
-    window.it(description, handler);
-  } else {
-    if (description.indexOf(':') !== -1) {
-      //console.log('REMOTE');
-      return itRemotely(description, handler, {
-        caller
-      });
+  if (isReciever) {
+    if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+      throw new Error('Reciever mode unsupported in the browser');
     } else {
-      //console.log('LOCAL');
-      return (0, _mocha.test)(description, handler);
+      const contract = new Promise((resolve, reject) => {
+        waiting[description] = {
+          resolve,
+          reject
+        };
+      });
+      isReciever.it(description, async function () {
+        this.timeout(5000);
+        await contract;
+      });
+    }
+  } else {
+    if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+      window.it(description, handler);
+    } else {
+      if (description.indexOf(':') !== -1) {
+        return itRemotely(description, handler, {
+          caller
+        });
+      } else {
+        return (0, _mocha.test)(description, handler);
+      }
     }
   }
 };

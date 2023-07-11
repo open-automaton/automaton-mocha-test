@@ -4,10 +4,12 @@ const require = createRequire(import.meta.url);
 const logRunningOnClose = require('why-is-node-running');
 const yargs = require('yargs');
 const Mocha = require('mocha');
+//const { it, describe } = require('mocha');
 const express = require('express');
 import { scanImports, setBaseDir } from 'environment-safe-import-introspect/src/index.mjs';
 import { getPackage } from 'environment-safe-package/src/environment-safe-package.mjs';
-import { registerRemote, getTestURL, testHTML } from '../src/mocha.mjs';
+import { registerRemote, getTestURL, testHTML, getRemote, mochaTool } from '../src/mocha.mjs';
+import { mochaEventHandler, setReciever } from '../src/index.mjs';
 import * as fs from 'fs';
 import * as path from 'path';
 const Automaton = require('@open-automaton/automaton');
@@ -52,6 +54,11 @@ const args = yargs
         default: false,
         describe: 'Load in the system\'s default browser',
         type: 'boolean'
+    })
+    .option('b', {
+        alias: 'browser',
+        describe: 'Load all tests in a browser context',
+        type: 'string'
     })
     .option('r', {
         alias: 'relaxed',
@@ -129,7 +136,23 @@ const scanPackage = async()=>{
     Object.keys(pkg.moka).forEach((key)=>{
         if(key === 'stub' || key === 'stubs' || key === 'shims') return;
         const data = pkg.moka[key];
-        registerRemote(key, data.engine, data.options || {});
+        const options = data.options || {};
+        options.onConsole = (...args)=>{
+            let parsedArgs = null;
+            if(
+                typeof args[0] === 'string' &&
+                args[0][0] === '[' && 
+                ( parsedArgs = JSON.parse(args[0]) ) && 
+                Array.isArray(parsedArgs) && 
+                typeof parsedArgs[0] === 'string'
+            ){
+                //assume this is json-stream reporter output
+                mochaEventHandler(...parsedArgs)
+            }else{
+                console.log(...args);
+            }
+        };
+        registerRemote(key, data.engine, options);
     });
     if(pkg.moka.stub && pkg.moka.stubs){
         pkg.moka.stubs.forEach((stub)=>{
@@ -180,7 +203,7 @@ const resolveTestSet = (passed)=>{
 (async ()=>{
     setBaseDir('/');
     const { modules } = await scanPackage();
-    if(args.s){
+    if(args.s || args.b){
         const app = express();
         const port = 8080;
         
@@ -190,6 +213,7 @@ const resolveTestSet = (passed)=>{
             const html = await testHTML(
                 `<script type="module" src="/test/test.mjs"></script>`,
                 {
+                    headless : !!args.b,
                     map:`<script type="importmap"> { "imports": ${
                         JSON.stringify(modules, null, '    ') 
                     } }</script>`
@@ -200,7 +224,7 @@ const resolveTestSet = (passed)=>{
         
         await new Promise((resolve)=>{
             app.listen(port, () => {
-                console.log(`>>> ${port}`)
+                console.log(`Test server running on localhost @ ${port}`)
                 resolve();
             })
         });
@@ -210,39 +234,20 @@ const resolveTestSet = (passed)=>{
         exec(`open ${url}`, (error, stdout, stderr) => { });
         return;
     }
-    // Instantiate a Mocha instance.
-    const mocha = new Mocha();
-    const current = process.cwd();
-    const testDir = current+'/test';
-    
-    const passed = args._;
-    
-    const allImports = [];
-    
-    const addFile = async (fileName)=>{
-        const imports = await scanImports(fileName);
-        imports.forEach((imprt)=>{
-            if(allImports.indexOf(imprt) === -1){
-                allImports.push(imprt);
-            }
+    if(args.b){ //we're going to dummy the whole suite to the browser
+        const url = getTestURL({ }).replace('8081', '8080');
+        const remote = getRemote(args.b);
+        setReciever(Mocha);
+        const mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
+        await mocha.tool.addAllFiles();
+        mocha.tool.run();
+        remote.fetch({ url }, (err, html)=>{
+            if(err) throw err;
         });
-        return mocha.addFile(fileName);
-    };
-    
-    const files = await resolveTestSet(args._);
-    const work = [];
-    for(let lcv =0; lcv < files.length; lcv++){
-        work.push(addFile(files[lcv]));
+    }else{
+        // Standard mocha usage with optional per test callouts
+        const mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
+        await mocha.tool.addAllFiles();
+        mocha.tool.run();
     }
-    await Promise.all(work);
-    await mocha.loadFilesAsync();
-    mocha.run(function(failures){
-        if(args.v || arg.d) logRunningOnClose();
-        if(!arg.d) process.exit(failures);
-        else{
-            process.on('exit', function(){
-                process.exit(failures);  // exit with non-zero status if there were failures
-            });
-        }
-    });
 })();

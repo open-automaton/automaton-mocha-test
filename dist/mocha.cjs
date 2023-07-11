@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.testRemote = exports.testHTML = exports.test = exports.registerRemote = exports.launchTestServer = exports.getTestURL = exports.generateTestBody = exports.createDependencies = void 0;
+exports.testRemote = exports.testHTML = exports.test = exports.setDefaultPort = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = void 0;
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
 function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
@@ -25,14 +25,46 @@ const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRe
  */
 
 let _require = null;
+const mochaTool = {
+  init: (Mocha, args, resolveTestSet, scanImports, logRunningOnClose) => {
+    const allImports = [];
+    const addFile = async (mocha, fileName) => {
+      const imports = await scanImports(fileName);
+      imports.forEach(imprt => {
+        if (allImports.indexOf(imprt) === -1) {
+          allImports.push(imprt);
+        }
+      });
+      return mocha.addFile(fileName);
+    };
+    const mocha = new Mocha();
+    mocha.tool = {
+      addAllFiles: async () => {
+        const files = await resolveTestSet(args._);
+        const work = [];
+        for (let lcv = 0; lcv < files.length; lcv++) {
+          work.push(addFile(mocha, files[lcv]));
+        }
+        await Promise.all(work);
+        await mocha.loadFilesAsync();
+        return mocha;
+      },
+      run: () => {
+        mocha.run(function (failures) {
+          if (args.v || args.d) logRunningOnClose();
+          if (!args.d) process.exit(failures);else {
+            process.on('exit', function () {
+              process.exit(failures); // exit with non-zero status if there were failures
+            });
+          }
+        });
+      }
+    };
 
-/*const fnToMochaTestBody = function(desc, fn){
-     var body = fn.toString();
-     var fileBody = `describe('test', function(){
-         it('${desc}', ${body})
-     })`;
-     return new Function(fileBody);
- };*/
+    return mocha;
+  }
+};
+exports.mochaTool = mochaTool;
 const fnsToMochaTestBody = function (desc, fns, wrapInContext) {
   var body = '';
   if (wrapInContext) {
@@ -153,13 +185,24 @@ const registerRemote = (name, engineName, options = {}) => {
   remotes[name] = instance;
 };
 exports.registerRemote = registerRemote;
-const defaultPort = 8080;
-let nextPort = defaultPort;
+let defaultPort = null;
+let nextPort = null;
+const setDefaultPort = port => {
+  defaultPort = port;
+  nextPort = defaultPort;
+};
+exports.setDefaultPort = setDefaultPort;
+setDefaultPort(8081);
 const getTestURL = options => {
   const url = `http://${options.host || 'localhost'}:${options.port || defaultPort}/test/index.html?script=${options.caller || "test/test.cjs"}&grep=${options.description ? encodeURIComponent(options.description) : ''}`;
   return url;
 };
 exports.getTestURL = getTestURL;
+const getRemote = name => {
+  if (!remotes[name]) throw new Error(`Remote '${name}' does not exist`);
+  return remotes[name];
+};
+exports.getRemote = getRemote;
 const testRemote = (desc, testLogicFn, options) => {
   try {
     const caller = options.caller.split('/automaton-mocha-test/').pop();
@@ -172,7 +215,9 @@ const testRemote = (desc, testLogicFn, options) => {
     }
     it(`🌎 ${description}`, async function () {
       this.timeout(10000); //10s default
-      const server = await launchTestServer('./', port);
+      console.log('server on', port);
+      /*const server =*/
+      await launchTestServer('./', port);
       if (!remotes[remoteName]) {
         throw new Error(`Remote '${remoteName}' was not found!`);
       }
@@ -181,7 +226,6 @@ const testRemote = (desc, testLogicFn, options) => {
         caller,
         description: desc
       });
-      //console.log(remotes[remoteName])
       const result = await new Promise((resolve, reject) => {
         remotes[remoteName].fetch({
           url
@@ -194,9 +238,10 @@ const testRemote = (desc, testLogicFn, options) => {
             return reject(error);
           }
           resolve(data);
-          server.close();
+          //server.close();
         });
       });
+
       console.log('>>>', result);
     });
   } catch (ex) {

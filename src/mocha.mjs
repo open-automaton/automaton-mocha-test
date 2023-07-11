@@ -17,13 +17,47 @@ import express from 'express';
 import * as mod from 'module';
 let require = null;
 
-/*const fnToMochaTestBody = function(desc, fn){
-     var body = fn.toString();
-     var fileBody = `describe('test', function(){
-         it('${desc}', ${body})
-     })`;
-     return new Function(fileBody);
- };*/
+export const mochaTool = {
+    init : (Mocha, args, resolveTestSet, scanImports, logRunningOnClose)=>{
+        const allImports = [];
+        const addFile = async (mocha, fileName)=>{
+            const imports = await scanImports(fileName);
+            imports.forEach((imprt)=>{
+                if(allImports.indexOf(imprt) === -1){
+                    allImports.push(imprt);
+                }
+            });
+            return mocha.addFile(fileName);
+        };
+        const mocha = new Mocha();
+        mocha.tool = {
+            addAllFiles : async ()=>{
+                const files = await resolveTestSet(args._);
+                const work = [];
+                for(let lcv =0; lcv < files.length; lcv++){
+                    work.push(addFile(mocha, files[lcv]));
+                }
+                await Promise.all(work);
+                await mocha.loadFilesAsync();
+                return mocha;
+            },
+            run : ()=>{
+                mocha.run(function(failures){
+                    if(args.v || args.d) logRunningOnClose();
+                    if(!args.d) process.exit(failures);
+                    else{
+                        process.on('exit', function(){
+                            process.exit(failures);  // exit with non-zero status if there were failures
+                        });
+                    }
+                });
+            },
+            
+        };
+        return mocha;
+    }
+};
+
 const fnsToMochaTestBody = function(desc, fns, wrapInContext){
     var body = '';
     if(wrapInContext){
@@ -146,8 +180,15 @@ export const registerRemote = (name, engineName, options={})=>{
     remotes[name] = instance;
 };
 
-const defaultPort = 8080;
-let nextPort = defaultPort;
+let defaultPort = null;
+let nextPort = null;
+
+export const setDefaultPort = (port)=>{
+    defaultPort = port;
+    nextPort = defaultPort;
+};
+
+setDefaultPort(8081);
 
 export const getTestURL = (options)=>{
     const url = `http://${
@@ -164,6 +205,11 @@ export const getTestURL = (options)=>{
     return url;
 };
 
+export const getRemote = (name)=>{
+    if(!remotes[name]) throw new Error(`Remote '${name}' does not exist`);
+    return remotes[name];
+};
+
 export const testRemote = (desc, testLogicFn, options)=>{
     try{
         const caller = options.caller.split('/automaton-mocha-test/').pop();
@@ -176,12 +222,12 @@ export const testRemote = (desc, testLogicFn, options)=>{
         }
         it(`🌎 ${description}`, async function(){
             this.timeout(10000); //10s default
-            const server = await launchTestServer('./', port);
+            console.log('server on', port);
+            /*const server =*/ await launchTestServer('./', port);
             if(!remotes[remoteName]){
                 throw new Error(`Remote '${remoteName}' was not found!`);
             }
             const url = getTestURL({port, caller, description: desc});
-            //console.log(remotes[remoteName])
             const result = await new Promise((resolve, reject)=>{
                 remotes[remoteName].fetch({ url }, (err, data)=>{
                     let match = null;
@@ -192,7 +238,7 @@ export const testRemote = (desc, testLogicFn, options)=>{
                         return reject(error);
                     }
                     resolve(data);
-                    server.close();
+                    //server.close();
                 });
             });
             console.log('>>>', result);
