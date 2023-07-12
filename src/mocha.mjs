@@ -7,7 +7,7 @@
  
 import express from 'express';
 import * as mod from 'module';
-import { getPackage } from 'environment-safe-package/src/environment-safe-package.mjs';
+import { getPackage } from '@environment-safe/package';
 import { mochaEventHandler } from '../src/index.mjs';
 let require = null;
 
@@ -92,10 +92,16 @@ export const scanPackage = async(includeRemotes)=>{
     let moduleName = null;
     let subpkg = null;
     let location = null;
+    if(pkg.moka.stub && pkg.moka.stubs){
+        pkg.moka.stubs.forEach((stub)=>{
+            modules[stub] = args.p + pkg.moka.stub;
+        });
+    }
     while(list.length){
         moduleName = list.shift();
         try{
             if(!require) require = mod.createRequire(import.meta.url);
+            if(modules[moduleName]) continue;
             const thisPath = require.resolve(moduleName);
             const parts = thisPath.split(`/${moduleName}/`);
             parts.pop();

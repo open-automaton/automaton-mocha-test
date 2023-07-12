@@ -1,6 +1,6 @@
 Moka
 ====
-A mocha test runner with additional functionality designed for native esmodule development across many environments using a single test suite and no boilerplate. It supports standard execution, executing a full suite in a remote (browser) environment, executing individual tests in the browser or scraper scripts to validate the final state of your HTML. Most importantly it builds the import map for you, by scanning the dependency tree.
+A mocha test runner with browsers baked in, designed for native esmodule development across many environments using a common test suite and no boilerplate. It supports standard execution, executing a full suite in a remote (browser) environment, executing individual tests in the browser or scraper scripts to validate the final state of your HTML. Most importantly it builds the import map for you, by scanning the dependency tree so you just run your suite the same way you do locally.
 
 Best coupled with [environment-safe modules](https://github.com/environment-safe).
 
@@ -8,6 +8,8 @@ Best coupled with [environment-safe modules](https://github.com/environment-safe
 
 Configuration
 -------------
+
+First, unless you are using shims, moka **requires** that your local paths match your repo names. You'll also need a dependency, [detect-browser](https://www.npmjs.com/package/detect-browser) to be a devDependencies entry, so the bootstrap can detect incompatible browsers.
 
 Before using `moka` you need to add it's configuration to your `package.json` you need to define a set of targets as well as any packages you will be stubbing ( substituting a dummy module for, because it isn't actually in the executed browser code path) and shimming (providing an explicit location for a given package). `moka`'s own `package.json` is [a good example of how this might look](https://github.com/open-automaton/automaton-mocha-test/blob/master/package.json#L23-L42), because the package tests itself.
 
@@ -85,7 +87,7 @@ to run the same test inside the browser:
 ```bash
 npm run browser-test
 ```
-to run the same test headless in chrome:
+to run the same test headless in chrome, firefox and safari:
 ```bash
 npm run headless-browser-test
 ```

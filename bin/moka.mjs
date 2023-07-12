@@ -7,7 +7,7 @@ const Mocha = require('mocha');
 //const { it, describe } = require('mocha');
 const express = require('express');
 import { scanImports, setBaseDir } from 'environment-safe-import-introspect/src/index.mjs';
-import { getPackage } from 'environment-safe-package/src/environment-safe-package.mjs';
+import { getPackage } from '@environment-safe/package';
 import { registerRemote, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs } from '../src/mocha.mjs';
 import { mochaEventHandler, setReciever } from '../src/index.mjs';
 import * as fs from 'fs';

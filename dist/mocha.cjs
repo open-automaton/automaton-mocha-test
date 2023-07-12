@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setDefaultPort = exports.scanPackage = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = void 0;
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
-var _environmentSafePackage = require("environment-safe-package/dist/environment-safe-package.cjs");
+var _package = require("@environment-safe/package");
 var _index = require("../dist/index.cjs");
 function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
 function _interopRequireWildcard(obj, nodeInterop) { if (!nodeInterop && obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(nodeInterop); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (key !== "default" && Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
@@ -71,7 +71,7 @@ const setPackageArgs = value => {
 };
 exports.setPackageArgs = setPackageArgs;
 const scanPackage = async includeRemotes => {
-  const pkg = await (0, _environmentSafePackage.getPackage)();
+  const pkg = await (0, _package.getPackage)();
   const dependencies = Object.keys(pkg.dependencies || []);
   const devDependencies = Object.keys(pkg.devDependencies || []);
   const seen = {};
@@ -82,15 +82,21 @@ const scanPackage = async includeRemotes => {
   let moduleName = null;
   let subpkg = null;
   let location = null;
+  if (pkg.moka.stub && pkg.moka.stubs) {
+    pkg.moka.stubs.forEach(stub => {
+      modules[stub] = args.p + pkg.moka.stub;
+    });
+  }
   while (list.length) {
     moduleName = list.shift();
     try {
       if (!_require) _require = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
+      if (modules[moduleName]) continue;
       const thisPath = _require.resolve(moduleName);
       const parts = thisPath.split(`/${moduleName}/`);
       parts.pop();
       const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
-      subpkg = await (0, _environmentSafePackage.getPackage)(localPath);
+      subpkg = await (0, _package.getPackage)(localPath);
       if (!subpkg) throw new Error(`Could not find ${localPath}`);
       mains[moduleName] = getCommonJS(subpkg, args);
       seen[moduleName] = true;
