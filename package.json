@@ -1,44 +1,73 @@
 {
-    "name": "automaton-mocha-test",
+    "name": "@open-automaton/moka",
     "version": "0.0.1",
-    "main": "dist/index.cjs",
+    "type": "module",
+    "main": "dist/index.mjs",
     "module": "src/index.mjs",
-    "homepage": "null",
-    "description": "null",
-    "keywords": [],
-    "author": "Abbey Hawk Sparrow<null>()",
+    "commonjs": "dist/index.cjs",
+    "exports": {
+        ".": {
+            "import": "./src/index.mjs",
+            "require": "./dist/index.cjs"
+        },
+        "./index.js": {
+            "import": "./src/index.mjs",
+            "require": "./dist/index.cjs"
+        }
+    },
+    "homepage": "https://github.com/open-automaton/automaton-mocha-test",
+    "description": "Run individual mocha tests in node + the browser using common suites: no boilerplate",
+    "keywords": [
+        "mocha",
+        "browser",
+        "test",
+        "testing",
+        "modules",
+        "esmodules"
+    ],
+    "author": "Abbey Hawk Sparrow <@khrome> (http://patternweaver.com)",
     "contributors": [],
     "repository": {
         "type": "git",
-        "url": "null"
+        "url": "https://github.com/open-automaton/automaton-mocha-test.git"
     },
     "bugs": {
-        "url": "null"
+        "url": "https://github.com/open-automaton/automaton-mocha-test/issues"
     },
-    "type": "module",
     "bin": {
-        "mocha-automaton": "./bin/mocha-automaton.mjs",
-        "moka": "./bin/mocha-automaton.mjs"
+        "mocha-automaton": "./bin/moka.mjs",
+        "moka": "./bin/moka.mjs"
     },
     "moka": {
         "firefox": {
             "engine": "@open-automaton/playwright-mining-engine",
-            "options": { "type": "firefox" }
+            "options": {
+                "type": "firefox"
+            }
         },
         "chrome": {
             "engine": "@open-automaton/playwright-mining-engine",
-            "options": { "type": "chromium" }
+            "options": {
+                "type": "chromium"
+            }
         },
         "safari": {
             "engine": "@open-automaton/playwright-mining-engine",
-            "options": { "type": "webkit" }
+            "options": {
+                "type": "webkit"
+            }
         },
         "stub": "src/stub.mjs",
-        "stubs": [ "express", "module" ],
-        "shims" : {
-            "chai" : "node_modules/chai/chai.js",
-            "browser-or-node" : "node_modules/browser-or-node/src/index.js"
-        } 
+        "stubs": [
+            "express",
+            "module",
+            "path"
+        ],
+        "shims": {
+            "chai": "node_modules/chai/chai.js",
+            "browser-or-node": "node_modules/browser-or-node/src/index.js",
+            "environment-safe-package/src/environment-safe-package.mjs": "node_modules/environment-safe-package/src/environment-safe-package.mjs"
+        }
     },
     "license": "MIT",
     "devDependencies": {
@@ -58,15 +87,16 @@
     },
     "scripts": {
         "lint": "./node_modules/.bin/eslint src/*.mjs test/*.mjs",
-        "test": "./bin/moka.mjs test/test.mjs",
+        "test": "npm run import-test; npm run headless-browser-test; ",
         "import-test": "./node_modules/.bin/mocha test/test.mjs",
         "require-test": "./node_modules/.bin/mocha test/test.cjs",
         "build-commonjs": "./node_modules/.bin/babel src --out-dir dist --out-file-extension .cjs",
-        "headless-browser-test-old": "./node_modules/.bin/mocha-chrome test/headless.html --chrome-flags '[ \"--disable-web-security\", \"--disable-site-isolation-trials\", \"--allow-file-access-from-files\", \"--allow-insecure-localhost\", \"--allow-running-insecure-content\"]' --ignore-exceptions",
-        "headless-browser-test": "./bin/moka.mjs --server . --browser chrome --relaxed --prefix ../ test/test.mjs",
+        "headless-browser-test": "npm run headless-chrome-test; npm run headless-firefox-test; npm run headless-safari-test",
+        "headless-chrome-test": "./bin/moka.mjs --server . --browser chrome --relaxed --prefix ../ test/test.mjs",
+        "headless-firefox-test": "./bin/moka.mjs --server . --browser firefox --relaxed --prefix ../ test/test.mjs",
+        "headless-safari-test": "./bin/moka.mjs --server . --browser safari --relaxed --prefix ../ test/test.mjs",
         "browser-test": "./bin/moka.mjs --server . --local-browser --relaxed --prefix ../ test/test.mjs",
-        "browser-test-old": "open http://localhost:8000/test/browser.html; npx http-server -p 8000",
-        "container-test": "docker build . -t environment-safe-package.json -f ./containers/test.dockerfile; docker logs --follow \"$(docker run -d environment-safe-package.json)\"",
+        "container-test": "docker build . -t moka.json -f ./containers/test.dockerfile; docker logs --follow \"$(docker run -d moka.json)\"",
         "generate-docs": "for i in src/*.mjs; do echo \"generating docs for: ${i}\";./node_modules/.bin/jsdoc2md -c .jsdoc.json \"${i}\" > \"docs/$(basename ${i%.mjs}).md\"; done",
         "generate-types": "for i in src/*.mjs; do echo \"generating types for: ${i}\"; ./node_modules/.bin/jsdoc -t node_modules/tsd-jsdoc/dist -c .jsdoc.json \"${i}\"; mv out/types.d.ts \"src/$(basename ${i%.mjs}).d.ts\"; done; rmdir out",
         "add-generated-files-to-commit": "git add docs/*.md; git add src/*.d.ts; git add dist/*.cjs",
@@ -76,9 +106,10 @@
         "@open-automaton/automaton": "^0.0.12",
         "@open-automaton/cheerio-mining-engine": "^0.0.8",
         "@open-automaton/jsdom-mining-engine": "^0.0.1",
-        "@open-automaton/playwright-mining-engine": "^0.0.9",
+        "@open-automaton/playwright-mining-engine": "^0.0.11",
         "@open-automaton/puppeteer-mining-engine": "^0.0.8",
         "browser-or-node": "^2.1.1",
+        "detect-browser": "^5.3.0",
         "environment-safe-console-intercept": "^0.1.0",
         "environment-safe-import-introspect": "^0.0.1",
         "environment-safe-package": "^0.0.4",

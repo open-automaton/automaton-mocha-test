@@ -3,21 +3,15 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.testRemote = exports.testHTML = exports.test = exports.setDefaultPort = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = void 0;
+exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setDefaultPort = exports.scanPackage = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = void 0;
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
+var _environmentSafePackage = require("environment-safe-package/dist/environment-safe-package.cjs");
+var _index = require("../dist/index.cjs");
 function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
 function _interopRequireWildcard(obj, nodeInterop) { if (!nodeInterop && obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(nodeInterop); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (key !== "default" && Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 /* global describe:false, it:false */
-/*
-import { isBrowser, isJsDom } from 'browser-or-node';
-import * as mod from 'module';
-import * as path from 'path';
-let internalRequire = null;
-if(typeof require !== 'undefined') internalRequire = require;
-const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRequire(import.meta.url));
-//*/
 
 /**
  * A JSON object
@@ -65,6 +59,88 @@ const mochaTool = {
   }
 };
 exports.mochaTool = mochaTool;
+const getCommonJS = (pkg, args) => {
+  return args.p + ['node_modules', pkg.name, pkg.exports && pkg.exports['.'] && pkg.exports['.'].require ? pkg.exports['.'].require : (pkg.type === 'commonjs' || !pkg.type) && (pkg.commonjs || pkg.main) || pkg.commonjs || args.r && pkg.main].join('/');
+};
+const getModule = (pkg, args) => {
+  return args.p + ['node_modules', pkg.name, pkg.exports && pkg.exports['.'] && pkg.exports['.'].import ? pkg.exports['.'].import : pkg.type === 'module' && (pkg.module || pkg.main) || pkg.module || args.r && pkg.main].join('/');
+};
+let args = {};
+const setPackageArgs = value => {
+  args = value;
+};
+exports.setPackageArgs = setPackageArgs;
+const scanPackage = async includeRemotes => {
+  const pkg = await (0, _environmentSafePackage.getPackage)();
+  const dependencies = Object.keys(pkg.dependencies || []);
+  const devDependencies = Object.keys(pkg.devDependencies || []);
+  const seen = {};
+  const mains = {};
+  const modules = {};
+  const locations = {};
+  const list = dependencies.slice(0).concat(devDependencies.slice(0));
+  let moduleName = null;
+  let subpkg = null;
+  let location = null;
+  while (list.length) {
+    moduleName = list.shift();
+    try {
+      if (!_require) _require = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
+      const thisPath = _require.resolve(moduleName);
+      const parts = thisPath.split(`/${moduleName}/`);
+      parts.pop();
+      const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
+      subpkg = await (0, _environmentSafePackage.getPackage)(localPath);
+      if (!subpkg) throw new Error(`Could not find ${localPath}`);
+      mains[moduleName] = getCommonJS(subpkg, args);
+      seen[moduleName] = true;
+      locations[moduleName] = location;
+      modules[moduleName] = getModule(subpkg, args);
+      Object.keys(subpkg.dependencies || {}).forEach(dep => {
+        if (list.indexOf(dep) === -1 && !seen[dep]) {
+          list.push(dep);
+        }
+      });
+    } catch (ex) {
+      if (args.v) console.log('FAILED', moduleName, ex);
+    }
+  }
+  if (includeRemotes) {
+    if (!pkg.moka) throw new Error('.moka entry not found in package!');
+    Object.keys(pkg.moka).forEach(key => {
+      if (key === 'stub' || key === 'stubs' || key === 'shims') return;
+      const data = pkg.moka[key];
+      const options = data.options || {};
+      options.onConsole = (...args) => {
+        let parsedArgs = null;
+        if (typeof args[0] === 'string' && args[0][0] === '[' && (parsedArgs = JSON.parse(args[0])) && Array.isArray(parsedArgs) && typeof parsedArgs[0] === 'string') {
+          //assume this is json-stream reporter output
+          (0, _index.mochaEventHandler)(...parsedArgs);
+        } else {
+          console.log(...args);
+        }
+      };
+      options.onError = event => {
+        (0, _index.mochaEventHandler)(event);
+      };
+      registerRemote(key, data.engine, options);
+    });
+  }
+  if (pkg.moka.stub && pkg.moka.stubs) {
+    pkg.moka.stubs.forEach(stub => {
+      modules[stub] = args.p + pkg.moka.stub;
+    });
+  }
+  if (pkg.moka.shims) {
+    Object.keys(pkg.moka.shims).forEach(shim => {
+      modules[shim] = args.p + pkg.moka.shims[shim];
+    });
+  }
+  return {
+    modules
+  };
+};
+exports.scanPackage = scanPackage;
 const fnsToMochaTestBody = function (desc, fns, wrapInContext) {
   var body = '';
   if (wrapInContext) {
@@ -99,12 +175,18 @@ const generateTestBody = (description, testLogicFn) => {
   return '' + fnsToMochaTestBody(description, [testLogicFn]) + '';
 };
 exports.generateTestBody = generateTestBody;
-const launchTestServer = (dir, port = 8084, map) => {
+let modules = null;
+const launchTestServer = async (dir, port = 8084, map) => {
+  if (!_require) _require = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
   const app = (0, _express.default)();
+  if (!modules) {
+    modules = (await scanPackage(true, args)).modules;
+  }
   app.get('/test/index.html', async (req, res) => {
     try {
       const html = await testHTML("<script type=\"module\" src=\"/test/test.cjs\"></script>", {
-        map
+        headless: true,
+        map: `<script type="importmap"> { "imports": ${JSON.stringify(modules, null, '    ')} }</script>`
       });
       res.send(html);
     } catch (ex) {
@@ -133,6 +215,16 @@ const testHTML = async (testTag, options = {}) => {
   const mochaUrl = options.mocha || '/node_modules/mocha/mocha.js';
   const testLibs = options.testLibs || `
         <div id="mocha"></div>
+        <script type=module>
+            import { detect } from 'detect-browser';
+            const browser = detect();
+            if((browser && (
+                browser.name === 'safari' &&
+                parseInt(browser.version) < 16
+            )) || !browser){
+                throw new Error('Safari < 16.4 not supported!');
+            }
+        </script>
         <script src="${mochaUrl}"></script>`;
   const init = options.init || `
         <script type="module">
@@ -213,37 +305,41 @@ const testRemote = (desc, testLogicFn, options) => {
     if (port.toString().trim() === '++') {
       port = nextPort++;
     }
-    it(`🌎 ${description}`, async function () {
-      this.timeout(10000); //10s default
-      console.log('server on', port);
-      /*const server =*/
-      await launchTestServer('./', port);
-      if (!remotes[remoteName]) {
-        throw new Error(`Remote '${remoteName}' was not found!`);
-      }
-      const url = getTestURL({
-        port,
-        caller,
-        description: desc
-      });
-      const result = await new Promise((resolve, reject) => {
-        remotes[remoteName].fetch({
-          url
-        }, (err, data) => {
-          let match = null;
-          if (err && typeof err === 'string' && (match = err.match(/<pre>.*<\/pre>/g))) {
-            match = match[0].replace('<pre>', '').replace('</pre>', '');
-            const error = new Error(`🌎 ${match}`);
-            error.stack = 'Remote execution environment:?';
-            return reject(error);
-          }
-          resolve(data);
-          //server.close();
+    if (!remotes[remoteName]) {
+      it.skip(`🌎[${remoteName}] ${description}`, () => {});
+      //throw new Error(`Remote '${remoteName}' was not found!`);
+    } else {
+      it(`🌎[${remoteName}] ${description}`, async function () {
+        this.timeout(10000); //10s default
+        /*const server =*/
+        await launchTestServer('./', port);
+        if (!remotes[remoteName]) {
+          throw new Error(`Remote '${remoteName}' was not found!`);
+        }
+        const url = getTestURL({
+          port,
+          caller,
+          description: desc
         });
-      });
+        const result = await new Promise((resolve, reject) => {
+          remotes[remoteName].fetch({
+            url
+          }, (err, data) => {
+            let match = null;
+            if (err && typeof err === 'string' && (match = err.match(/<pre>.*<\/pre>/g))) {
+              match = match[0].replace('<pre>', '').replace('</pre>', '');
+              const error = new Error(`🌎 ${match}`);
+              error.stack = 'Remote execution environment:?';
+              return reject(error);
+            }
+            resolve(data);
+            //server.close();
+          });
+        });
 
-      console.log('>>>', result);
-    });
+        console.log('>>>', result);
+      });
+    }
   } catch (ex) {
     console.log(ex);
   }

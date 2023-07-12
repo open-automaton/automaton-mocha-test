@@ -1,11 +1,3 @@
-/*
-import { isBrowser, isJsDom } from 'browser-or-node';
-import * as mod from 'module';
-import * as path from 'path';
-let internalRequire = null;
-if(typeof require !== 'undefined') internalRequire = require;
-const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRequire(import.meta.url));
-//*/
 import { isBrowser, isJsDom } from 'browser-or-node';
 import { test, testRemote } from './mocha.mjs';
 /**
@@ -22,47 +14,78 @@ export const setReciever = (handle)=>{
 };
 
 export const mochaEventHandler = (type, event)=>{
-    switch(type){
-        case 'pass':
-            if(waiting[event.title]){
-                const handle = waiting[event.title];
-                delete waiting[event.title];
-                handle.resolve();
-            }else{
-                console.log('unknown event', type, event);
+    try{
+        if(type.message && type.stack){
+            //it's an error
+        }else{
+            switch(type){
+                case 'pass':
+                    if(waiting[event.title]){
+                        const handle = waiting[event.title];
+                        delete waiting[event.title];
+                        handle.resolve();
+                    }else{
+                        console.log('unknown event', type, event);
+                    }
+                    break;
+                case 'fail':
+                    if(waiting[event.title]){
+                        const handle = waiting[event.title];
+                        delete waiting[event.title];
+                        const error = new Error();
+                        error.message = event.err;
+                        error.stack = event.stack;
+                        error.target = event;
+                        handle.reject(error);
+                    }else{
+                        console.log('unknown event', type, event);
+                    }
+                    break;
+                case 'start':
+                case 'end':
             }
-            break;
-        case 'start':
-        case 'end':
+        }
+    }catch(ex){
+        console.log('::', ex);
     }
 };
  
+//https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/mocha/index.d.ts#L490-L543
 export const it = (str, fn)=>{
-    const description = (typeof str === 'string' )?str:'';
-    const handler = (typeof str === 'function' )?str:fn;
-    const caller = (new Error()).stack.split('\n')[1].split('//').slice(-1)[0].split(':')[0];
-    if(isReciever){
-        if(isBrowser || isJsDom){
-            throw new Error('Reciever mode unsupported in the browser');
-        }else{
-            const contract = new Promise((resolve, reject)=>{
-                waiting[description] = {resolve, reject};
-            });
-            isReciever.it(description, async function(){
-                this.timeout(5000);
-                await contract;
-            });
-        }
-    }else{
-        if(isBrowser || isJsDom){
-            window.it(description, handler);
-        }else{
-            if(description.indexOf(':') !== -1){
-                return itRemotely(description, handler, { caller });
+    try{
+        const description = (typeof str === 'string' )?str:'';
+        const handler = (typeof str === 'function' )?str:fn;
+        const caller = (new Error()).stack.split('\n')[1].split('//').slice(-1)[0].split(':')[0];
+        if(isReciever){
+            if(isBrowser || isJsDom){
+                throw new Error('Reciever mode unsupported in the browser');
             }else{
-                return test(description, handler);
+                const contract = new Promise((resolve, reject)=>{
+                    try{
+                        waiting[description] = { resolve, reject };
+                    }catch(ex){
+                        reject(ex);
+                    }
+                });
+                isReciever.it('🌎 '+description, async function(){
+                    this.timeout(15000);
+                    await contract;
+                });
+            }
+        }else{
+            if(isBrowser || isJsDom){
+                window.it(description, handler);
+            }else{
+                if(description.indexOf(':') !== -1){
+                    return itRemotely(description, handler, { caller });
+                }else{
+                    return test(description, handler);
+                }
             }
         }
+    }catch(ex){
+        console.log(ex, '???');
+        throw ex;
     }
 };
 

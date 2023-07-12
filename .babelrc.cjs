@@ -9,8 +9,8 @@ module.exports = {
                   "replace": ".cjs"
                 },
                 {
-                  "search": /\.\/src\//,
-                  "replace": "./dist/"
+                  "search": /\/src\//,
+                  "replace": "/dist/"
                 }
             ]
         }]

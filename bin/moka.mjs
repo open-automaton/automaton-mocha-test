@@ -8,7 +8,7 @@ const Mocha = require('mocha');
 const express = require('express');
 import { scanImports, setBaseDir } from 'environment-safe-import-introspect/src/index.mjs';
 import { getPackage } from 'environment-safe-package/src/environment-safe-package.mjs';
-import { registerRemote, getTestURL, testHTML, getRemote, mochaTool } from '../src/mocha.mjs';
+import { registerRemote, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs } from '../src/mocha.mjs';
 import { mochaEventHandler, setReciever } from '../src/index.mjs';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -75,98 +75,6 @@ const args = yargs
     .help()
     .argv;
 
-const getCommonJS = (pkg)=>{
-    if(pkg.moka)
-    return args.p + ['node_modules', pkg.name, (
-        (pkg.exports && pkg.exports['.'] && pkg.exports['.'].require)?
-        pkg.exports['.'].require:
-        ((
-            (pkg.type === 'commonjs' || !pkg.type)  && 
-            (pkg.commonjs  || pkg.main) 
-        ) || pkg.commonjs || (args.r && pkg.main))
-    )].join('/')
-};
-
-const getModule = (pkg)=>{
-    return args.p + ['node_modules', pkg.name, (
-        (pkg.exports && pkg.exports['.'] && pkg.exports['.'].import)?
-        pkg.exports['.'].import:
-        ((
-            pkg.type === 'module' && 
-            (pkg.module  || pkg.main) 
-        ) || pkg.module || (args.r && pkg.main))
-    )].join('/')
-};
-
-const scanPackage = async()=>{
-    const pkg = await getPackage();
-    const dependencies = Object.keys(pkg.dependencies || []);
-    const devDependencies = Object.keys(pkg.devDependencies || []);
-    const seen = {};
-    const mains = {};
-    const modules = {};
-    const locations = {};
-    const list = dependencies.slice(0).concat(devDependencies.slice(0));
-    let moduleName = null;
-    let subpkg = null;
-    let location = null;
-    while(list.length){
-        moduleName = list.shift();
-        try{
-            const thisPath = require.resolve(moduleName);
-            const parts = thisPath.split(`/${moduleName}/`);
-            parts.pop();
-            const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
-            subpkg = await getPackage(localPath);
-            if(!subpkg) throw new Error(`Could not find ${localPath}`)
-            mains[moduleName] = getCommonJS(subpkg);
-            seen[moduleName] = true;
-            locations[moduleName] = location;
-            modules[moduleName] = getModule(subpkg);
-            Object.keys(subpkg.dependencies || {}).forEach((dep)=>{
-                if(list.indexOf(dep) === -1 && !seen[dep]){
-                    list.push(dep);
-                }
-            });
-        }catch(ex){
-            if(args.v) console.log('FAILED', moduleName, ex)
-        }
-    }
-    if(!pkg.moka) throw new Error('.moka entry not found in package!');
-    Object.keys(pkg.moka).forEach((key)=>{
-        if(key === 'stub' || key === 'stubs' || key === 'shims') return;
-        const data = pkg.moka[key];
-        const options = data.options || {};
-        options.onConsole = (...args)=>{
-            let parsedArgs = null;
-            if(
-                typeof args[0] === 'string' &&
-                args[0][0] === '[' && 
-                ( parsedArgs = JSON.parse(args[0]) ) && 
-                Array.isArray(parsedArgs) && 
-                typeof parsedArgs[0] === 'string'
-            ){
-                //assume this is json-stream reporter output
-                mochaEventHandler(...parsedArgs)
-            }else{
-                console.log(...args);
-            }
-        };
-        registerRemote(key, data.engine, options);
-    });
-    if(pkg.moka.stub && pkg.moka.stubs){
-        pkg.moka.stubs.forEach((stub)=>{
-            modules[stub] = args.p + pkg.moka.stub;
-        });
-    }
-    if(pkg.moka.shims){
-        Object.keys(pkg.moka.shims).forEach((shim)=>{
-            modules[shim] = args.p + pkg.moka.shims[shim];
-        });
-    }
-    return { modules };
-};
-
 const resolveTestSet = (passed)=>{
     const current = process.cwd();
     const results = [];
@@ -201,8 +109,9 @@ const resolveTestSet = (passed)=>{
 };
     
 (async ()=>{
+    setPackageArgs(args);
     setBaseDir('/');
-    const { modules } = await scanPackage();
+    const { modules } = await scanPackage(true);
     if(args.s || args.b){
         const app = express();
         const port = 8080;
@@ -230,7 +139,7 @@ const resolveTestSet = (passed)=>{
         });
     }
     if(args.l){
-        const url = getTestURL({ });
+        const url = getTestURL({ }).replace('8081', '8080');;
         exec(`open ${url}`, (error, stdout, stderr) => { });
         return;
     }

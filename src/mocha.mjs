@@ -1,12 +1,4 @@
 /* global describe:false, it:false */
-/*
-import { isBrowser, isJsDom } from 'browser-or-node';
-import * as mod from 'module';
-import * as path from 'path';
-let internalRequire = null;
-if(typeof require !== 'undefined') internalRequire = require;
-const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRequire(import.meta.url));
-//*/
 
 /**
  * A JSON object
@@ -15,6 +7,8 @@ const ensureRequire = ()=> (!internalRequire) && (internalRequire = mod.createRe
  
 import express from 'express';
 import * as mod from 'module';
+import { getPackage } from 'environment-safe-package/src/environment-safe-package.mjs';
+import { mochaEventHandler } from '../src/index.mjs';
 let require = null;
 
 export const mochaTool = {
@@ -58,6 +52,109 @@ export const mochaTool = {
     }
 };
 
+const getCommonJS = (pkg, args)=>{
+    return args.p + ['node_modules', pkg.name, (
+        (pkg.exports && pkg.exports['.'] && pkg.exports['.'].require)?
+            pkg.exports['.'].require:
+            ((
+                (pkg.type === 'commonjs' || !pkg.type)  && 
+                (pkg.commonjs  || pkg.main) 
+            ) || pkg.commonjs || (args.r && pkg.main))
+    )].join('/');
+};
+
+const getModule = (pkg, args)=>{
+    return args.p + ['node_modules', pkg.name, (
+        (pkg.exports && pkg.exports['.'] && pkg.exports['.'].import)?
+            pkg.exports['.'].import:
+            ((
+                pkg.type === 'module' && 
+                (pkg.module  || pkg.main) 
+            ) || pkg.module || (args.r && pkg.main))
+    )].join('/');
+};
+
+let args = {};
+export const setPackageArgs = (value)=>{
+    args = value;
+};
+
+
+export const scanPackage = async(includeRemotes)=>{
+    const pkg = await getPackage();
+    const dependencies = Object.keys(pkg.dependencies || []);
+    const devDependencies = Object.keys(pkg.devDependencies || []);
+    const seen = {};
+    const mains = {};
+    const modules = {};
+    const locations = {};
+    const list = dependencies.slice(0).concat(devDependencies.slice(0));
+    let moduleName = null;
+    let subpkg = null;
+    let location = null;
+    while(list.length){
+        moduleName = list.shift();
+        try{
+            if(!require) require = mod.createRequire(import.meta.url);
+            const thisPath = require.resolve(moduleName);
+            const parts = thisPath.split(`/${moduleName}/`);
+            parts.pop();
+            const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
+            subpkg = await getPackage(localPath);
+            if(!subpkg) throw new Error(`Could not find ${localPath}`);
+            mains[moduleName] = getCommonJS(subpkg, args);
+            seen[moduleName] = true;
+            locations[moduleName] = location;
+            modules[moduleName] = getModule(subpkg, args);
+            Object.keys(subpkg.dependencies || {}).forEach((dep)=>{
+                if(list.indexOf(dep) === -1 && !seen[dep]){
+                    list.push(dep);
+                }
+            });
+        }catch(ex){
+            if(args.v) console.log('FAILED', moduleName, ex);
+        }
+    }
+    if(includeRemotes){
+        if(!pkg.moka) throw new Error('.moka entry not found in package!');
+        Object.keys(pkg.moka).forEach((key)=>{
+            if(key === 'stub' || key === 'stubs' || key === 'shims') return;
+            const data = pkg.moka[key];
+            const options = data.options || {};
+            options.onConsole = (...args)=>{
+                let parsedArgs = null;
+                if(
+                    typeof args[0] === 'string' &&
+                    args[0][0] === '[' && 
+                    ( parsedArgs = JSON.parse(args[0]) ) && 
+                    Array.isArray(parsedArgs) && 
+                    typeof parsedArgs[0] === 'string'
+                ){
+                    //assume this is json-stream reporter output
+                    mochaEventHandler(...parsedArgs);
+                }else{
+                    console.log(...args);
+                }
+            };
+            options.onError = (event)=>{
+                mochaEventHandler(event);
+            };
+            registerRemote(key, data.engine, options);
+        });
+    }
+    if(pkg.moka.stub && pkg.moka.stubs){
+        pkg.moka.stubs.forEach((stub)=>{
+            modules[stub] = args.p + pkg.moka.stub;
+        });
+    }
+    if(pkg.moka.shims){
+        Object.keys(pkg.moka.shims).forEach((shim)=>{
+            modules[shim] = args.p + pkg.moka.shims[shim];
+        });
+    }
+    return { modules };
+};
+
 const fnsToMochaTestBody = function(desc, fns, wrapInContext){
     var body = '';
     if(wrapInContext){
@@ -91,14 +188,25 @@ const fnsToMochaTest = function(desc, fns, wrapInContext){
 export const generateTestBody = (description, testLogicFn)=>{
     return ''+fnsToMochaTestBody(description, [testLogicFn])+'';
 };
-export const launchTestServer = (dir, port=8084, map)=>{
-    const app = express();
+
+let modules = null;
+export const launchTestServer = async (dir, port=8084, map)=>{
+    if(!require) require = mod.createRequire(import.meta.url);
     
+    const app = express();
+    if(!modules){
+        modules = (await scanPackage(true, args)).modules;
+    }
     app.get('/test/index.html', async (req, res)=>{
         try{
             const html = await testHTML(
                 '<script type="module" src="/test/test.mjs"></script>',
-                {map}
+                {
+                    headless : true,
+                    map:`<script type="importmap"> { "imports": ${
+                        JSON.stringify(modules, null, '    ') 
+                    } }</script>`
+                }
             );
             res.send(html);
         }catch(ex){
@@ -126,6 +234,16 @@ export const testHTML = async (testTag, options={})=>{
     const mochaUrl = options.mocha || '/node_modules/mocha/mocha.js';
     const testLibs = options.testLibs ||`
         <div id="mocha"></div>
+        <script type=module>
+            import { detect } from 'detect-browser';
+            const browser = detect();
+            if((browser && (
+                browser.name === 'safari' &&
+                parseInt(browser.version) < 16
+            )) || !browser){
+                throw new Error('Safari < 16.4 not supported!');
+            }
+        </script>
         <script src="${mochaUrl}"></script>`;
     const init = options.init || `
         <script type="module">
@@ -220,29 +338,33 @@ export const testRemote = (desc, testLogicFn, options)=>{
         if( port.toString().trim() === '++' ){
             port = nextPort++;
         }
-        it(`🌎 ${description}`, async function(){
-            this.timeout(10000); //10s default
-            console.log('server on', port);
-            /*const server =*/ await launchTestServer('./', port);
-            if(!remotes[remoteName]){
-                throw new Error(`Remote '${remoteName}' was not found!`);
-            }
-            const url = getTestURL({port, caller, description: desc});
-            const result = await new Promise((resolve, reject)=>{
-                remotes[remoteName].fetch({ url }, (err, data)=>{
-                    let match = null;
-                    if(err && typeof err === 'string' && (match = err.match(/<pre>.*<\/pre>/g))){
-                        match = match[0].replace('<pre>', '').replace('</pre>', '');
-                        const error = new Error(`🌎 ${match}`);
-                        error.stack = 'Remote execution environment:?';
-                        return reject(error);
-                    }
-                    resolve(data);
-                    //server.close();
+        if(!remotes[remoteName]){
+            it.skip(`🌎[${remoteName}] ${description}`, ()=>{});
+            //throw new Error(`Remote '${remoteName}' was not found!`);
+        }else{
+            it(`🌎[${remoteName}] ${description}`, async function(){
+                this.timeout(10000); //10s default
+                /*const server =*/ await launchTestServer('./', port);
+                if(!remotes[remoteName]){
+                    throw new Error(`Remote '${remoteName}' was not found!`);
+                }
+                const url = getTestURL({port, caller, description: desc});
+                const result = await new Promise((resolve, reject)=>{
+                    remotes[remoteName].fetch({ url }, (err, data)=>{
+                        let match = null;
+                        if(err && typeof err === 'string' && (match = err.match(/<pre>.*<\/pre>/g))){
+                            match = match[0].replace('<pre>', '').replace('</pre>', '');
+                            const error = new Error(`🌎 ${match}`);
+                            error.stack = 'Remote execution environment:?';
+                            return reject(error);
+                        }
+                        resolve(data);
+                        //server.close();
+                    });
                 });
+                console.log('>>>', result);
             });
-            console.log('>>>', result);
-        });
+        }
     }catch(ex){
         console.log(ex);
     }
