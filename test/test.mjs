@@ -2,8 +2,8 @@
 // this is so we can generate any number of dependencies
 // but still end up with a very simple boilerplate that works everywhere
 import { it } from '../src/index.mjs';
-import { chai } from 'environment-safe-chai';
-import { intercept } from 'environment-safe-console-intercept';
+import { chai } from '@environment-safe/chai';
+import { intercept } from '@environment-safe/console-intercept';
 const should = chai.should();
 should.exist({});
 

@@ -11,7 +11,7 @@ Configuration
 
 First, unless you are using shims, moka **requires** that your local paths match your repo names. You'll also need a dependency, [detect-browser](https://www.npmjs.com/package/detect-browser) to be a devDependencies entry, so the bootstrap can detect incompatible browsers.
 
-Before using `moka` you need to add it's configuration to your `package.json` you need to define a set of targets as well as any packages you will be stubbing ( substituting a dummy module for, because it isn't actually in the executed browser code path) and shimming (providing an explicit location for a given package). `moka`'s own `package.json` is [a good example of how this might look](https://github.com/open-automaton/automaton-mocha-test/blob/master/package.json#L23-L42), because the package tests itself.
+Before using `moka` you need to add it's configuration to your `package.json` you need to define a set of targets as well as any packages you will be stubbing ( substituting a dummy module for, because it isn't actually in the executed browser code path) and shimming (providing an explicit location for a given package). `moka`'s own `package.json` is [a good example of how this might look](https://github.com/open-automaton/moka/blob/master/package.json#L53-L83), because the package tests itself.
 
 the easiest path is to set up a simple `.moka` entry then test interactively for problematic dependencies. My hope is that the need for stubs and shims subsides over time.
 
@@ -44,7 +44,7 @@ You can test with `moka` in one of 4 ways:
 Because `moka` is built on top of mocha, all tests remain compatible and can be run directly (remote tests are skipped)
 
 ```bash
-mocha test/foo.mjs
+    mocha test/foo.mjs
 ```
 
 ### OS default browser

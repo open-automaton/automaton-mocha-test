@@ -1,6 +1,6 @@
 {
     "name": "@open-automaton/moka",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "type": "module",
     "main": "dist/index.mjs",
     "module": "src/index.mjs",
@@ -27,7 +27,7 @@
             "require": "./dist/stub.cjs"
         }
     },
-    "homepage": "https://github.com/open-automaton/automaton-mocha-test",
+    "homepage": "https://github.com/open-automaton/moka",
     "description": "Run individual mocha tests in node + the browser using common suites: no boilerplate",
     "keywords": [
         "mocha",
@@ -41,10 +41,10 @@
     "contributors": [],
     "repository": {
         "type": "git",
-        "url": "https://github.com/open-automaton/automaton-mocha-test.git"
+        "url": "https://github.com/open-automaton/moka.git"
     },
     "bugs": {
-        "url": "https://github.com/open-automaton/automaton-mocha-test/issues"
+        "url": "https://github.com/open-automaton/moka/issues"
     },
     "bin": {
         "mocha-automaton": "./bin/moka.mjs",
@@ -86,6 +86,8 @@
         "@babel/cli": "^7.22.5",
         "@babel/core": "^7.22.5",
         "@babel/plugin-transform-modules-commonjs": "^7.22.5",
+        "@environment-safe/chai": "^0.1.0",
+        "@environment-safe/console-intercept": "^0.1.0",
         "babel-plugin-search-and-replace": "^1.1.1",
         "babel-plugin-transform-import-meta": "^2.2.0",
         "chai": "^4.3.7",
@@ -115,16 +117,15 @@
         "prepare": "husky install"
     },
     "dependencies": {
+        "@environment-safe/import-introspect": "^0.1.0",
         "@environment-safe/package": "^0.1.2",
-        "@open-automaton/automaton": "^0.0.12",
+        "@open-automaton/automaton": "^0.1.0",
         "@open-automaton/cheerio-mining-engine": "^0.0.8",
         "@open-automaton/jsdom-mining-engine": "^0.0.1",
         "@open-automaton/playwright-mining-engine": "^0.0.11",
         "@open-automaton/puppeteer-mining-engine": "^0.0.8",
         "browser-or-node": "^2.1.1",
         "detect-browser": "^5.3.0",
-        "environment-safe-console-intercept": "^0.1.0",
-        "environment-safe-import-introspect": "^0.0.1",
         "express": "^4.18.2",
         "why-is-node-running": "^2.2.2",
         "yargs": "^17.7.2"
