@@ -1,6 +1,6 @@
 {
     "name": "@open-automaton/moka",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "type": "module",
     "main": "dist/index.mjs",
     "module": "src/index.mjs",
@@ -91,7 +91,6 @@
         "babel-plugin-search-and-replace": "^1.1.1",
         "babel-plugin-transform-import-meta": "^2.2.0",
         "chai": "^4.3.7",
-        "environment-safe-chai": "^0.1.0",
         "eslint": "^8.43.0",
         "husky": "^8.0.3",
         "jsdoc": "^3.6.11",
