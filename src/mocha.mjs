@@ -10,6 +10,7 @@ import * as mod from 'module';
 import { getPackage } from '@environment-safe/package';
 import { mochaEventHandler } from '../src/index.mjs';
 let require = null;
+let resolve = null;
 
 export const mochaTool = {
     init : (Mocha, args, resolveTestSet, scanImports, logRunningOnClose)=>{
@@ -80,7 +81,7 @@ export const setPackageArgs = (value)=>{
 };
 
 
-export const scanPackage = async(includeRemotes)=>{
+export const scanPackage = async(includeRemotes, includeDeps=true)=>{
     const pkg = await getPackage();
     const dependencies = Object.keys(pkg.dependencies || []);
     const devDependencies = Object.keys(pkg.devDependencies || []);
@@ -97,34 +98,52 @@ export const scanPackage = async(includeRemotes)=>{
             modules[stub] = args.p + pkg.moka.stub;
         });
     }
-    while(list.length){
-        moduleName = list.shift();
-        try{
-            if(!require) require = mod.createRequire(import.meta.url);
-            if(modules[moduleName]) continue;
-            const thisPath = require.resolve(moduleName);
-            const parts = thisPath.split(`/${moduleName}/`);
-            parts.pop();
-            const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
-            subpkg = await getPackage(localPath);
-            if(!subpkg) throw new Error(`Could not find ${localPath}`);
-            mains[moduleName] = getCommonJS(subpkg, args);
-            seen[moduleName] = true;
-            locations[moduleName] = location;
-            modules[moduleName] = getModule(subpkg, args);
-            Object.keys(subpkg.dependencies || {}).forEach((dep)=>{
-                if(list.indexOf(dep) === -1 && !seen[dep]){
-                    list.push(dep);
+    if(includeDeps){
+        //console.log('DEPS!')
+        while(list.length){
+            moduleName = list.shift();
+            try{
+                if(!require) require = mod.createRequire(import.meta.url);
+                if(modules[moduleName]) continue;
+                let thisPath = null;
+                try{
+                    thisPath = resolve(moduleName);
+                }catch(ex){
+                    if(!remoteRequire) remoteRequire = mod.createRequire(import.meta.url);
+                    if(remoteRequire){
+                        thisPath = remoteRequire.resolve(moduleName);
+                    }else throw ex;
                 }
-            });
-        }catch(ex){
-            if(args.v) console.log('FAILED', moduleName, ex);
+                const parts = thisPath.split(`/${moduleName}/`);
+                parts.pop();
+                const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
+                subpkg = await getPackage(localPath);
+                if(!subpkg) throw new Error(`Could not find ${localPath}`);
+                mains[moduleName] = getCommonJS(subpkg, args);
+                seen[moduleName] = true;
+                locations[moduleName] = location;
+                modules[moduleName] = getModule(subpkg, args);
+                Object.keys(subpkg.dependencies || {}).forEach((dep)=>{
+                    if(list.indexOf(dep) === -1 && !seen[dep]){
+                        list.push(dep);
+                    }
+                });
+            }catch(ex){
+                if(args.v)  
+                    console.log('FAILED', moduleName, ex);
+            }
         }
     }
     if(includeRemotes){
         if(!pkg.moka) throw new Error('.moka entry not found in package!');
         Object.keys(pkg.moka).forEach((key)=>{
-            if(key === 'stub' || key === 'stubs' || key === 'shims') return;
+            if(
+                key === 'stub' || 
+                key === 'stubs' || 
+                key === 'require' || 
+                key === 'shims' || 
+                key === 'global-shims'
+            ) return;
             const data = pkg.moka[key];
             const options = data.options || {};
             options.onConsole = (...args)=>{
@@ -158,7 +177,7 @@ export const scanPackage = async(includeRemotes)=>{
             modules[shim] = args.p + pkg.moka.shims[shim];
         });
     }
-    return { modules };
+    return { modules, pkg };
 };
 
 const fnsToMochaTestBody = function(desc, fns, wrapInContext){
@@ -197,7 +216,7 @@ export const generateTestBody = (description, testLogicFn)=>{
 
 let modules = null;
 export const launchTestServer = async (dir, port=8084, map)=>{
-    if(!require) require = mod.createRequire(import.meta.url);
+    //if(!require) require = mod.createRequire(import.meta.url);
     
     const app = express();
     if(!modules){
@@ -262,6 +281,7 @@ export const testHTML = async (testTag, options={})=>{
         '<script>mocha.setup({ui:\'bdd\', reporter: \'json-stream\'})</script>':
         '<script>mocha.setup(\'bdd\')</script>';
     //TODO: support test extraction
+    const config = options.config || {};
     const mapIndent = '                ';
     const html = `
         <html>
@@ -269,6 +289,7 @@ export const testHTML = async (testTag, options={})=>{
                 <title>Moka Tests</title>
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n'+mapIndent) || ''}
+                ${(config['global-shims'] || []).map((url)=> `<script src="${url}"></script>` ).join('')}
             </head>
             <body>
                 ${testLibs}
@@ -297,9 +318,17 @@ export const test = (description, testLogicFn, clean)=>{
 
 const remotes = {};
 const engines = {};
+
+export const registerRequire = (rqr, rslv)=>{
+    require = rqr;
+    resolve = rslv;
+};
+
+let remoteRequire = null;
+
 export const registerRemote = (name, engineName, options={})=>{
-    if(!require) require = mod.createRequire(import.meta.url);
-    if(!engines[engineName]) engines[engineName] = require(engineName);
+    if(!remoteRequire) remoteRequire = mod.createRequire(import.meta.url);
+    if(!engines[engineName]) engines[engineName] = remoteRequire(engineName);
     const instance = new engines[engineName](options);
     remotes[name] = instance;
 };
@@ -368,7 +397,7 @@ export const testRemote = (desc, testLogicFn, options)=>{
                         //server.close();
                     });
                 });
-                console.log('>>>', result);
+                return result;
             });
         }
     }catch(ex){

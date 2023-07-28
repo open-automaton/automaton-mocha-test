@@ -9,7 +9,9 @@ Best coupled with [environment-safe modules](https://github.com/environment-safe
 Configuration
 -------------
 
-First, unless you are using shims, moka **requires** that your local paths match your repo names. You'll also need a dependency, [detect-browser](https://www.npmjs.com/package/detect-browser) to be a devDependencies entry, so the bootstrap can detect incompatible browsers.
+First, unless you are using shims, moka **requires** that your local paths match your repo names. If your project directory is `/project` then module `foo` should be at `/project/foo/` and `@bar/baz` must be at `/project/@bar/baz`
+
+ You'll also need a dependency, [detect-browser](https://www.npmjs.com/package/detect-browser) to be a devDependencies entry, so the bootstrap can detect incompatible browsers.
 
 Before using `moka` you need to add it's configuration to your `package.json` you need to define a set of targets as well as any packages you will be stubbing ( substituting a dummy module for, because it isn't actually in the executed browser code path) and shimming (providing an explicit location for a given package). `moka`'s own `package.json` is [a good example of how this might look](https://github.com/open-automaton/moka/blob/master/package.json#L53-L83), because the package tests itself.
 

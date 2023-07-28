@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setDefaultPort = exports.scanPackage = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = void 0;
+exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setDefaultPort = exports.scanPackage = exports.registerRequire = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = void 0;
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
 var _package = require("@environment-safe/package");
@@ -19,6 +19,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
  */
 
 let _require = null;
+let resolve = null;
 const mochaTool = {
   init: (Mocha, args, resolveTestSet, scanImports, logRunningOnClose) => {
     const allImports = [];
@@ -70,7 +71,7 @@ const setPackageArgs = value => {
   args = value;
 };
 exports.setPackageArgs = setPackageArgs;
-const scanPackage = async includeRemotes => {
+const scanPackage = async (includeRemotes, includeDeps = true) => {
   const pkg = await (0, _package.getPackage)();
   const dependencies = Object.keys(pkg.dependencies || []);
   const devDependencies = Object.keys(pkg.devDependencies || []);
@@ -87,34 +88,45 @@ const scanPackage = async includeRemotes => {
       modules[stub] = args.p + pkg.moka.stub;
     });
   }
-  while (list.length) {
-    moduleName = list.shift();
-    try {
-      if (!_require) _require = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
-      if (modules[moduleName]) continue;
-      const thisPath = _require.resolve(moduleName);
-      const parts = thisPath.split(`/${moduleName}/`);
-      parts.pop();
-      const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
-      subpkg = await (0, _package.getPackage)(localPath);
-      if (!subpkg) throw new Error(`Could not find ${localPath}`);
-      mains[moduleName] = getCommonJS(subpkg, args);
-      seen[moduleName] = true;
-      locations[moduleName] = location;
-      modules[moduleName] = getModule(subpkg, args);
-      Object.keys(subpkg.dependencies || {}).forEach(dep => {
-        if (list.indexOf(dep) === -1 && !seen[dep]) {
-          list.push(dep);
+  if (includeDeps) {
+    //console.log('DEPS!')
+    while (list.length) {
+      moduleName = list.shift();
+      try {
+        if (!_require) _require = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
+        if (modules[moduleName]) continue;
+        let thisPath = null;
+        try {
+          thisPath = resolve(moduleName);
+        } catch (ex) {
+          if (!remoteRequire) remoteRequire = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
+          if (remoteRequire) {
+            thisPath = remoteRequire.resolve(moduleName);
+          } else throw ex;
         }
-      });
-    } catch (ex) {
-      if (args.v) console.log('FAILED', moduleName, ex);
+        const parts = thisPath.split(`/${moduleName}/`);
+        parts.pop();
+        const localPath = parts.join(`/${moduleName}/`) + `/${moduleName}/`;
+        subpkg = await (0, _package.getPackage)(localPath);
+        if (!subpkg) throw new Error(`Could not find ${localPath}`);
+        mains[moduleName] = getCommonJS(subpkg, args);
+        seen[moduleName] = true;
+        locations[moduleName] = location;
+        modules[moduleName] = getModule(subpkg, args);
+        Object.keys(subpkg.dependencies || {}).forEach(dep => {
+          if (list.indexOf(dep) === -1 && !seen[dep]) {
+            list.push(dep);
+          }
+        });
+      } catch (ex) {
+        if (args.v) console.log('FAILED', moduleName, ex);
+      }
     }
   }
   if (includeRemotes) {
     if (!pkg.moka) throw new Error('.moka entry not found in package!');
     Object.keys(pkg.moka).forEach(key => {
-      if (key === 'stub' || key === 'stubs' || key === 'shims') return;
+      if (key === 'stub' || key === 'stubs' || key === 'require' || key === 'shims' || key === 'global-shims') return;
       const data = pkg.moka[key];
       const options = data.options || {};
       options.onConsole = (...args) => {
@@ -143,7 +155,8 @@ const scanPackage = async includeRemotes => {
     });
   }
   return {
-    modules
+    modules,
+    pkg
   };
 };
 exports.scanPackage = scanPackage;
@@ -183,7 +196,8 @@ const generateTestBody = (description, testLogicFn) => {
 exports.generateTestBody = generateTestBody;
 let modules = null;
 const launchTestServer = async (dir, port = 8084, map) => {
-  if (!_require) _require = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
+  //if(!require) require = mod.createRequire(import.meta.url);
+
   const app = (0, _express.default)();
   if (!modules) {
     modules = (await scanPackage(true, args)).modules;
@@ -241,6 +255,7 @@ const testHTML = async (testTag, options = {}) => {
     `;
   const script = options.headless ? '<script>mocha.setup({ui:\'bdd\', reporter: \'json-stream\'})</script>' : '<script>mocha.setup(\'bdd\')</script>';
   //TODO: support test extraction
+  const config = options.config || {};
   const mapIndent = '                ';
   const html = `
         <html>
@@ -248,6 +263,7 @@ const testHTML = async (testTag, options = {}) => {
                 <title>Moka Tests</title>
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n' + mapIndent) || ''}
+                ${(config['global-shims'] || []).map(url => `<script src="${url}"></script>`).join('')}
             </head>
             <body>
                 ${testLibs}
@@ -276,9 +292,15 @@ const test = (description, testLogicFn, clean) => {
 exports.test = test;
 const remotes = {};
 const engines = {};
+const registerRequire = (rqr, rslv) => {
+  _require = rqr;
+  resolve = rslv;
+};
+exports.registerRequire = registerRequire;
+let remoteRequire = null;
 const registerRemote = (name, engineName, options = {}) => {
-  if (!_require) _require = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
-  if (!engines[engineName]) engines[engineName] = _require(engineName);
+  if (!remoteRequire) remoteRequire = mod.createRequire(_require('url').pathToFileURL(__filename).toString());
+  if (!engines[engineName]) engines[engineName] = remoteRequire(engineName);
   const instance = new engines[engineName](options);
   remotes[name] = instance;
 };
@@ -343,7 +365,7 @@ const testRemote = (desc, testLogicFn, options) => {
           });
         });
 
-        console.log('>>>', result);
+        return result;
       });
     }
   } catch (ex) {

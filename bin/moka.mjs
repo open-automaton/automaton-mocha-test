@@ -8,7 +8,7 @@ const Mocha = require('mocha');
 const express = require('express');
 import { scanImports, setBaseDir } from '@environment-safe/import-introspect';
 import { getPackage } from '@environment-safe/package';
-import { registerRemote, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs } from '../src/mocha.mjs';
+import { registerRequire, registerRemote, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs } from '../src/mocha.mjs';
 import { mochaEventHandler, setReciever } from '../src/index.mjs';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -41,6 +41,11 @@ const args = yargs
         alias: 'prefix',
         default: '/',
         describe: 'prefix',
+        type: 'string'
+    })
+    .option('q', {
+        alias: 'require',
+        describe: 'a local file which exports the require used for assembly',
         type: 'string'
     })
     .option('d', {
@@ -111,7 +116,17 @@ const resolveTestSet = (passed)=>{
 (async ()=>{
     setPackageArgs(args);
     setBaseDir('/');
-    const { modules } = await scanPackage(true);
+    const { prePkg } = await scanPackage(true, false);
+    const requireLocation = (prePkg && prePkg.moka && prePkg.moka.require) || args.q;
+    let rqr = require;
+    let rslv = require.resolve;
+    if(requireLocation){
+        const imprt = await import(path.join(process.cwd(), requireLocation));
+        rqr = imprt.require;
+        rslv = imprt.resolve;
+    }
+    registerRequire(rqr, rslv);
+    const { modules, pkg } = await scanPackage(true);
     if(args.s || args.b){
         const app = express();
         const port = 8080;
@@ -125,7 +140,8 @@ const resolveTestSet = (passed)=>{
                     headless : !!args.b,
                     map:`<script type="importmap"> { "imports": ${
                         JSON.stringify(modules, null, '    ') 
-                    } }</script>`
+                    } }</script>`,
+                    config: pkg.moka
                 }
             );
             res.send(html);
