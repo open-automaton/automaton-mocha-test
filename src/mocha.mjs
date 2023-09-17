@@ -316,6 +316,10 @@ export const test = (description, testLogicFn, clean)=>{
     }
 };
 
+test.skip = (description, testLogicFn)=>{
+    it.skip(description, testLogicFn);
+};
+
 const remotes = {};
 const engines = {};
 

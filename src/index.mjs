@@ -68,6 +68,7 @@ export const it = (str, fn)=>{
                     }
                 });
                 isReciever.it('🌎 '+description, async function(){
+                    //todo: dynamic timeout
                     this.timeout(15000);
                     await contract;
                 });
@@ -87,6 +88,24 @@ export const it = (str, fn)=>{
         console.log(ex, '???');
         throw ex;
     }
+};
+
+it.skip = (description, handler)=>{
+    if(isBrowser || isJsDom){
+        window.it.skip(description, handler);
+    }else{
+        return test.skip(description, handler);
+    }
+}; // noop
+
+export const config = {
+    //todo: defaults
+};
+
+export const configure = (values)=>{
+    Object.keys(values).forEach((key)=>{
+        config[key] = values[key];
+    });
 };
 
 

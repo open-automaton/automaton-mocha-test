@@ -290,6 +290,9 @@ const test = (description, testLogicFn, clean) => {
   }
 };
 exports.test = test;
+test.skip = (description, testLogicFn) => {
+  it.skip(description, testLogicFn);
+};
 const remotes = {};
 const engines = {};
 const registerRequire = (rqr, rslv) => {

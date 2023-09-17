@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.hashString = void 0;
+exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.hashString = exports.configure = exports.config = void 0;
 var _browserOrNode = require("browser-or-node");
 var _mocha = require("./mocha.cjs");
 /**
@@ -76,6 +76,7 @@ const it = (str, fn) => {
           }
         });
         isReciever.it('🌎 ' + description, async function () {
+          //todo: dynamic timeout
           this.timeout(15000);
           await contract;
         });
@@ -99,6 +100,24 @@ const it = (str, fn) => {
   }
 };
 exports.it = it;
+it.skip = (description, handler) => {
+  if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+    window.it.skip(description, handler);
+  } else {
+    return _mocha.test.skip(description, handler);
+  }
+}; // noop
+
+const config = {
+  //todo: defaults
+};
+exports.config = config;
+const configure = values => {
+  Object.keys(values).forEach(key => {
+    config[key] = values[key];
+  });
+};
+exports.configure = configure;
 const hashString = str => {
   let theHash = 0,
     i,

@@ -134,6 +134,7 @@ const resolveTestSet = (passed)=>{
         app.use(express.static('.'))
         
         app.get('/test/index.html', async (req, res) => {
+            //todo: support deno's deps
             const html = await testHTML(
                 `<script type="module" src="/test/test.mjs"></script>`,
                 {
