@@ -4,8 +4,6 @@ A mocha test runner with browsers baked in, designed for native esmodule develop
 
 Best coupled with [environment-safe modules](https://github.com/environment-safe).
 
-(unrelated to [this project](https://www.npmjs.com/package/moka))
-
 Configuration - The Easy Way
 ----------------------------
 
