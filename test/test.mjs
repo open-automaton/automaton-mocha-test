@@ -36,13 +36,17 @@ describe('module', async ()=>{
         });
         
         it.skip('skipped test is skipped', ()=>{ });
-        
-        it('dismisses a popup', ()=>{
+    });
+    
+    describe.skip('uses a different configuration', ()=>{
+        it('dismisses a popup', async ()=>{
             configure({
                 dialog : (context, actions)=>{
+                    console.log('dialog');
                     actions.confirm();
                 } 
             });
+            alert(); //this should be dismissed so the test completes
         });
     });
 });

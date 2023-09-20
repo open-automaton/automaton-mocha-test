@@ -13,7 +13,7 @@ when you are done you can run `npm run browser-test` to launch an interactive te
 
 Everything's set up and ready to go.
 
-Configuration - The Hard Way
+Configuration - From Scratch
 ----------------------------
 
 First, unless you are using shims, moka **requires** that your local paths match your repo names. If your projects directory is `/devroot` then module `foo` should be at `/devroot/foo/` and `@bar/baz` must be at `/devroot/@bar/baz`. If you are using multiple instances of projects, you'll need to set up a symlinking scheme yourself.
@@ -35,13 +35,16 @@ Usage
 Given the following test script in `test/foo.mjs`:
 
 ```javascript
-import { it } from '@open-automaton/moka';
+import { it, configure } from '@open-automaton/moka';
 import { chai } from 'environment-safe-chai';
 const should = chai.should();
 
 describe('environment tests', async ()=>{
     describe('global objects', ()=>{
         it('object exists', async ()=>{
+            configure({
+                foo: "bar"
+            });
             should.exist(Object);
         });
         
