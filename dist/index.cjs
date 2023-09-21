@@ -3,7 +3,19 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.hashString = exports.configure = exports.config = void 0;
+Object.defineProperty(exports, "config", {
+  enumerable: true,
+  get: function () {
+    return _mocha.config;
+  }
+});
+Object.defineProperty(exports, "configure", {
+  enumerable: true,
+  get: function () {
+    return _mocha.configure;
+  }
+});
+exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.hashString = void 0;
 var _browserOrNode = require("browser-or-node");
 var _mocha = require("./mocha.cjs");
 /**
@@ -108,16 +120,6 @@ it.skip = (description, handler) => {
   }
 }; // noop
 
-const config = {
-  //todo: defaults
-};
-exports.config = config;
-const configure = values => {
-  Object.keys(values).forEach(key => {
-    config[key] = values[key];
-  });
-};
-exports.configure = configure;
 const hashString = str => {
   let theHash = 0,
     i,

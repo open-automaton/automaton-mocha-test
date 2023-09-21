@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setDefaultPort = exports.scanPackage = exports.registerRequire = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = void 0;
+exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setDefaultPort = exports.scanPackage = exports.registerRequire = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = exports.configure = exports.config = void 0;
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
 var _package = require("@environment-safe/package");
@@ -315,6 +315,22 @@ const setDefaultPort = port => {
   nextPort = defaultPort;
 };
 exports.setDefaultPort = setDefaultPort;
+const config = {
+  //todo: defaults
+};
+exports.config = config;
+const remoteKeys = ['dialog'];
+const configure = values => {
+  Object.keys(values).forEach(key => {
+    config[key] = values[key];
+    if (remoteKeys.indexOf(key) !== -1) {
+      Object.keys(remotes).forEach(remoteKey => {
+        remotes[remoteKey].options[key] = values[key];
+      });
+    }
+  });
+};
+exports.configure = configure;
 setDefaultPort(8081);
 const getTestURL = options => {
   const url = `http://${options.host || 'localhost'}:${options.port || defaultPort}/test/index.html?script=${options.caller || "test/test.cjs"}&grep=${options.description ? encodeURIComponent(options.description) : ''}`;
@@ -343,7 +359,7 @@ const testRemote = (desc, testLogicFn, options) => {
       it(`🌎[${remoteName}] ${description}`, async function () {
         this.timeout(10000); //10s default
         /*const server =*/
-        await launchTestServer('./', port);
+        await launchTestServer('./', defaultPort++);
         if (!remotes[remoteName]) {
           throw new Error(`Remote '${remoteName}' was not found!`);
         }
@@ -366,6 +382,7 @@ const testRemote = (desc, testLogicFn, options) => {
             resolve(data);
             //server.close();
           });
+          //remotes[remoteName].
         });
 
         return result;

@@ -3,6 +3,7 @@
 
 npm run lint
 npm run import-test
+npm run moka-test
 npm run headless-browser-test
 npm run build-commonjs
 npm run require-test

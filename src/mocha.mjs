@@ -345,6 +345,23 @@ export const setDefaultPort = (port)=>{
     nextPort = defaultPort;
 };
 
+export const config = {
+    //todo: defaults
+};
+
+const remoteKeys = ['dialog'];
+
+export const configure = (values)=>{
+    Object.keys(values).forEach((key)=>{
+        config[key] = values[key];
+        if(remoteKeys.indexOf(key) !== -1){
+            Object.keys(remotes).forEach((remoteKey)=>{
+                remotes[remoteKey].options[key] = values[key];
+            });
+        }
+    });
+};
+
 setDefaultPort(8081);
 
 export const getTestURL = (options)=>{
@@ -383,7 +400,7 @@ export const testRemote = (desc, testLogicFn, options)=>{
         }else{
             it(`🌎[${remoteName}] ${description}`, async function(){
                 this.timeout(10000); //10s default
-                /*const server =*/ await launchTestServer('./', port);
+                /*const server =*/ await launchTestServer('./', defaultPort++);
                 if(!remotes[remoteName]){
                     throw new Error(`Remote '${remoteName}' was not found!`);
                 }
@@ -400,6 +417,7 @@ export const testRemote = (desc, testLogicFn, options)=>{
                         resolve(data);
                         //server.close();
                     });
+                    //remotes[remoteName].
                 });
                 return result;
             });

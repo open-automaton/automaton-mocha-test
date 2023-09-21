@@ -4,12 +4,18 @@
 import { it, configure } from '../src/index.mjs';
 import { chai } from '@environment-safe/chai';
 import { intercept } from '@environment-safe/console-intercept';
+import { variables } from '@environment-safe/elements';
 const should = chai.should();
 should.exist({});
 
 
 describe('module', async ()=>{
     describe('performs a simple test suite', ()=>{
+        configure({
+            dialog : (context, actions)=>{
+                actions.confirm();
+            } 
+        });
         
         it('loads', async ()=>{
             const outputs = [];
@@ -36,16 +42,14 @@ describe('module', async ()=>{
         });
         
         it.skip('skipped test is skipped', ()=>{ });
-    });
-    
-    describe.skip('uses a different configuration', ()=>{
+        
         it('dismisses a popup', async ()=>{
-            configure({
-                dialog : (context, actions)=>{
-                    console.log('dialog');
-                    actions.confirm();
-                } 
-            });
+            if(variables.alert){ // only exists in the browser!
+                alert(); //this should be dismissed so the test completes
+            }
+        });
+        
+        it('firefox: dismisses an ff popup', async ()=>{ //make sure remote works as expected
             alert(); //this should be dismissed so the test completes
         });
     });

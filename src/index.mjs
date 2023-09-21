@@ -1,11 +1,11 @@
 import { isBrowser, isJsDom } from 'browser-or-node';
-import { test, testRemote } from './mocha.mjs';
+import { test, testRemote, configure, config } from './mocha.mjs';
 /**
  * A JSON object
  * @typedef { object } JSON
  */
 
-
+export { configure, config };
 let isReciever = false;
 let waiting = {};
 
@@ -97,16 +97,6 @@ it.skip = (description, handler)=>{
         return test.skip(description, handler);
     }
 }; // noop
-
-export const config = {
-    //todo: defaults
-};
-
-export const configure = (values)=>{
-    Object.keys(values).forEach((key)=>{
-        config[key] = values[key];
-    });
-};
 
 
 export const hashString = (str)=>{
