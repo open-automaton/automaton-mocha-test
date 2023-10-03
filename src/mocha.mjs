@@ -34,10 +34,11 @@ export const mochaTool = {
                 }
                 await Promise.all(work);
                 await mocha.loadFilesAsync();
-                return mocha;
+                return files;
             },
             run : ()=>{
                 mocha.run(function(failures){
+                    
                     if(args.v || args.d) logRunningOnClose();
                     if(!args.d) process.exit(failures);
                     else{
@@ -287,6 +288,7 @@ export const testHTML = async (testTag, options={})=>{
         <html>
             <head>
                 <title>Moka Tests</title>
+                <base filesystem="${process.cwd()}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n'+mapIndent) || ''}
                 ${(config['global-shims'] || []).map((url)=> `<script src="${url}"></script>` ).join('')}
@@ -301,6 +303,53 @@ export const testHTML = async (testTag, options={})=>{
         <html>
     `;
     return html;
+};
+
+const counters = {};
+export class Fixture{
+    static makePort(port){
+        if(!port) return 3000;
+        if(typeof port === 'string' && port[port.length-1] === '+'){
+            //it's an auto-increment string
+            if(!counters[port]) counters[port] = 0;
+            return parseInt(port) + (counters[port]++);
+        }   
+        return parseInt(port);
+    }
+    constructor(options={}){
+        this.options = options;
+        this.ready = this.createFixture();
+        (async ()=>{
+            this.fixture = await this.ready;
+        })();
+    }
+    
+    async createFixture(){
+        return await new Promise();
+    }
+    
+    async destroyFixture(){
+        return await new Promise();
+    }
+    
+}
+
+let fixtures = [];
+export const setFixtures = (value)=>{
+    fixtures = value;
+};
+
+export const fixture = (name, settings, cb)=>{
+    const fixture = fixtures.find((fix) => fix.name === name);
+    if(!fixture) throw new Error(`Fixture (${name}) failed to load!`);
+    it(`${fixture.name} fixture is loaded`, ()=>{
+        
+    });
+    cb(fixture.fixture, fixture.options);
+};
+
+export const fixturesLoaded = async ()=>{
+    return Promise.all(fixtures.map((fixture)=> fixture.ready ));
 };
 
 export const test = (description, testLogicFn, clean)=>{

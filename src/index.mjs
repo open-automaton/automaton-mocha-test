@@ -1,11 +1,11 @@
 import { isBrowser, isJsDom } from 'browser-or-node';
-import { test, testRemote, configure, config } from './mocha.mjs';
+import { test, testRemote, configure, config, fixture, fixturesLoaded, Fixture } from './mocha.mjs';
 /**
  * A JSON object
  * @typedef { object } JSON
  */
 
-export { configure, config };
+export { configure, config, fixture, fixturesLoaded, Fixture };
 let isReciever = false;
 let waiting = {};
 

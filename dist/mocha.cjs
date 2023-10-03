@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setDefaultPort = exports.scanPackage = exports.registerRequire = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.createDependencies = exports.configure = exports.config = void 0;
+exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setFixtures = exports.setDefaultPort = exports.scanPackage = exports.registerRequire = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.fixturesLoaded = exports.fixture = exports.createDependencies = exports.configure = exports.config = exports.Fixture = void 0;
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
 var _package = require("@environment-safe/package");
@@ -42,7 +42,7 @@ const mochaTool = {
         }
         await Promise.all(work);
         await mocha.loadFilesAsync();
-        return mocha;
+        return files;
       },
       run: () => {
         mocha.run(function (failures) {
@@ -261,6 +261,7 @@ const testHTML = async (testTag, options = {}) => {
         <html>
             <head>
                 <title>Moka Tests</title>
+                <base filesystem="${process.cwd()}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n' + mapIndent) || ''}
                 ${(config['global-shims'] || []).map(url => `<script src="${url}"></script>`).join('')}
@@ -277,6 +278,48 @@ const testHTML = async (testTag, options = {}) => {
   return html;
 };
 exports.testHTML = testHTML;
+const counters = {};
+class Fixture {
+  static makePort(port) {
+    if (!port) return 3000;
+    if (typeof port === 'string' && port[port.length - 1] === '+') {
+      //it's an auto-increment string
+      if (!counters[port]) counters[port] = 0;
+      return parseInt(port) + counters[port]++;
+    }
+    return parseInt(port);
+  }
+  constructor(options = {}) {
+    this.options = options;
+    this.ready = this.createFixture();
+    (async () => {
+      this.fixture = await this.ready;
+    })();
+  }
+  async createFixture() {
+    return await new Promise();
+  }
+  async destroyFixture() {
+    return await new Promise();
+  }
+}
+exports.Fixture = Fixture;
+let fixtures = [];
+const setFixtures = value => {
+  fixtures = value;
+};
+exports.setFixtures = setFixtures;
+const fixture = (name, settings, cb) => {
+  const fixture = fixtures.find(fix => fix.name === name);
+  if (!fixture) throw new Error(`Fixture (${name}) failed to load!`);
+  it(`${fixture.name} fixture is loaded`, () => {});
+  cb(fixture.fixture, fixture.options);
+};
+exports.fixture = fixture;
+const fixturesLoaded = async () => {
+  return Promise.all(fixtures.map(fixture => fixture.ready));
+};
+exports.fixturesLoaded = fixturesLoaded;
 const test = (description, testLogicFn, clean) => {
   let fn;
   let decoratedDescription = `🏠 ${description}`;

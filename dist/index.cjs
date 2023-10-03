@@ -3,6 +3,12 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+Object.defineProperty(exports, "Fixture", {
+  enumerable: true,
+  get: function () {
+    return _mocha.Fixture;
+  }
+});
 Object.defineProperty(exports, "config", {
   enumerable: true,
   get: function () {
@@ -13,6 +19,18 @@ Object.defineProperty(exports, "configure", {
   enumerable: true,
   get: function () {
     return _mocha.configure;
+  }
+});
+Object.defineProperty(exports, "fixture", {
+  enumerable: true,
+  get: function () {
+    return _mocha.fixture;
+  }
+});
+Object.defineProperty(exports, "fixturesLoaded", {
+  enumerable: true,
+  get: function () {
+    return _mocha.fixturesLoaded;
   }
 });
 exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.hashString = void 0;

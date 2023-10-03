@@ -30,8 +30,46 @@ In addition *all* tests must have a unique name
 
 the easiest path is to set up a simple `.moka` entry then test interactively for problematic dependencies. My hope is that the need for stubs and shims subsides over time.
 
+Additions
+---------
+
+Moka gives you access to a few new verbs, in addition to adjusting some of the behavior of the existing ones. One major restriction is *all* test names must be unique. Other than this, it behaves exactly like `mocha`.
+
+### Dialogs
+In some cases you will need to normalize between browser and serve flow differences, one of the primary obstacles is dialogs. `moka` handles this by letting you configure a `dialog` handler which is invoked in environments where it's relevant (the browser). For example, the following code auto-OKs every dialog window:
+
+```javascript
+configure({
+    dialog : (context, actions)=>{
+        actions.confirm();
+    } 
+});
+```
+
+These must be run outside the `it()` call to take effect (we can't configure the browser if we're *in* the browser!).
+
+### Fixtures
+In other cases you need a service to be available when the script is executed, but you want to *define* the service config in the script itself. this catch-22 is one of the main things that leads people to bolt on things to mocha and build their own alternate, but-almost-the-same test technology. Standard Mocha fixtures continue to work, but are challenging to use for cross environment contexts.
+
+For example, a `hello-world-server` fixture would be at: `test/fixtures/hello-world-server.mjs`
+
+```javascript
+
+```
+
+
+### Browser targeting by run
+
+In this scenario you have a full test suite which is run in *all* environments (This is the recommended way to work), and you provide the environment you want to run in to the test runner. and you'll get console output from each run.
+
+### Browser targeting by test
+
+In this scenario you have an integrated test suite (something like a regression suite), where you want to guarantee conformance across a series of isolated scenarios to prevent regressions in those specific instances. In this case the `it()` function allows the user to specify a `moka` target (defined in your project's package.json) (EX: if I have an entry for `firefox`, I can write a test that targets it with `it('firefox: my test description', ()=>{ /* ... */ } )`). 
+
 Usage
 -----
+
+
 Given the following test script in `test/foo.mjs`:
 
 ```javascript

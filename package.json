@@ -118,6 +118,9 @@
         "prepare": "husky install"
     },
     "dependencies": {
+        "@babel/generator": "^7.23.0",
+        "@babel/parser": "^7.23.0",
+        "@babel/traverse": "^7.23.0",
         "@environment-safe/import-introspect": "^0.1.0",
         "@environment-safe/package": "^0.1.2",
         "@open-automaton/automaton": "^0.1.0",

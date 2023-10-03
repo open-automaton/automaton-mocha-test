@@ -8,10 +8,17 @@ const Mocha = require('mocha');
 const express = require('express');
 import { scanImports, setBaseDir } from '@environment-safe/import-introspect';
 import { getPackage } from '@environment-safe/package';
-import { registerRequire, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs } from '../src/mocha.mjs';
+import { registerRequire, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs, setFixtures } from '../src/mocha.mjs';
 import { mochaEventHandler, setReciever, config } from '../src/index.mjs';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as parser from '@babel/parser';
+// imports, totally as-advertised :P 
+import traverseImport from '@babel/traverse';
+import generatorImport from '@babel/generator';
+const traverse = traverseImport.default;
+const generator = generatorImport.default;
+
 const Automaton = require('@open-automaton/automaton');
 const CheerioEngine = require('@open-automaton/cheerio-mining-engine');
 const PuppeteerEngine = require('@open-automaton/puppeteer-mining-engine');
@@ -92,6 +99,8 @@ const resolveTestSet = (passed)=>{
             }
         }
     }else{
+        console.log('args', args)
+        const testDir  = args._.pop() || 'test';
         const dir = fs.readdirSync(testDir);
         if(fs.existsSync('/test.js')){ //root test script
             results.push( path.join(current, 'test.js') );
@@ -160,6 +169,15 @@ const resolveTestSet = (passed)=>{
         exec(`open ${url}`, (error, stdout, stderr) => { });
         return;
     }
+    const fixtures = {};
+    const getFixture = async (name)=>{
+        if(fixtures[name]) return fixtures[name];
+        const { TestFixture } = await import(
+            `${process.cwd()}/test/fixtures/${name}.mjs`
+        );
+        fixtures[name] = TestFixture;
+        return TestFixture;
+    }
     if(args.b){ //we're going to dummy the whole suite to the browser
         const url = getTestURL({ }).replace('8081', '8080');
         const remote = getRemote(args.b);
@@ -173,6 +191,41 @@ const resolveTestSet = (passed)=>{
     }else{
         // Standard mocha usage with optional per test callouts
         const mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
+        const filesToAdd = resolveTestSet(args._);
+        const fixtureSet = [];
+        await Promise.all(filesToAdd.map((file)=>{
+            return new Promise((resolve, reject)=>{
+                fs.readFile(file, async (err, body)=>{
+                    if(err) return reject(err);
+                    const ast = parser.parse(body.toString(), {
+                        //todo: handle this for cross compile
+                        sourceType: 'module',
+                        plugins: [],
+                    });
+                    traverse(ast, {
+                        CallExpression(path) {
+                            if(path.node.callee.name === 'fixture'){
+                                const name = path.node.arguments[0].value;
+                                const settings = generator(path.node.arguments[1]).code;
+                                let data = '{}';
+                                eval('data = '+settings);
+                                const json = JSON.stringify(data);
+                                fixtureSet.push(new Promise(async (resolve, reject)=>{
+                                    const ThisFixture = await getFixture(name);
+                                    const fixture = new ThisFixture(data);
+                                    fixture.name = name;
+                                    await fixture.ready;
+                                    resolve(fixture);
+                                }));
+                            }
+                        }
+                    });
+                    resolve();
+                });
+            });
+        }));
+        const readyFixtures = await Promise.all(fixtureSet);
+        setFixtures(readyFixtures);
         await mocha.tool.addAllFiles();
         mocha.tool.run();
     }
