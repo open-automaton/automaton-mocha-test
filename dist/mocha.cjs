@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = exports.setFixtures = exports.setDefaultPort = exports.scanPackage = exports.registerRequire = exports.registerRemote = exports.mochaTool = exports.launchTestServer = exports.getTestURL = exports.getRemote = exports.generateTestBody = exports.fixturesLoaded = exports.fixture = exports.createDependencies = exports.configure = exports.config = exports.Fixture = void 0;
+var _browserOrNode = require("browser-or-node");
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
 var _package = require("@environment-safe/package");
@@ -197,7 +198,6 @@ exports.generateTestBody = generateTestBody;
 let modules = null;
 const launchTestServer = async (dir, port = 8084, map) => {
   //if(!require) require = mod.createRequire(import.meta.url);
-
   const app = (0, _express.default)();
   if (!modules) {
     modules = (await scanPackage(true, args)).modules;
@@ -211,6 +211,18 @@ const launchTestServer = async (dir, port = 8084, map) => {
       res.send(html);
     } catch (ex) {
       console.log(ex);
+    }
+  });
+  app.get('/fixtures.json', (req, res) => {
+    try {
+      const result = [];
+      fixtures.forEach(fixture => result.push({
+        name: fixture.name,
+        options: fixture.options
+      }));
+      res.send(JSON.stringify(result));
+    } catch (ex) {
+      console.log('!!!', ex);
     }
   });
   return new Promise((resolve, reject) => {
@@ -248,9 +260,9 @@ const testHTML = async (testTag, options = {}) => {
         <script src="${mochaUrl}"></script>`;
   const init = options.init || `
         <script type="module">
-            mocha.checkLeaks();
-            mocha.globals([]);
-            mocha.run();
+                mocha.checkLeaks();
+                mocha.globals([]);
+                mocha.run();
         </script>
     `;
   const script = options.headless ? '<script>mocha.setup({ui:\'bdd\', reporter: \'json-stream\'})</script>' : '<script>mocha.setup(\'bdd\')</script>';
@@ -264,6 +276,11 @@ const testHTML = async (testTag, options = {}) => {
                 <base filesystem="${process.cwd()}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n' + mapIndent) || ''}
+                <script type="module">
+                    (async ()=>{
+                        window.fixtures = await (await fetch('/fixtures.json')).json();
+                    })();
+                </script>
                 ${(config['global-shims'] || []).map(url => `<script src="${url}"></script>`).join('')}
             </head>
             <body>
@@ -310,14 +327,26 @@ const setFixtures = value => {
 };
 exports.setFixtures = setFixtures;
 const fixture = (name, settings, cb) => {
-  const fixture = fixtures.find(fix => fix.name === name);
-  if (!fixture) throw new Error(`Fixture (${name}) failed to load!`);
-  it(`${fixture.name} fixture is loaded`, () => {});
-  cb(fixture.fixture, fixture.options);
+  if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+    if (!window.fixtures) throw new Error('Fixtures failed to load!');
+    const fixtures = window.fixtures;
+    const fixture = fixtures.find(fix => fix.name === name);
+    if (!fixture) throw new Error(`Fixture (${name}) failed to load!`);
+    describe(`Fixture: ${fixture.name}`, () => {
+      cb({}, fixture.options);
+    });
+  } else {
+    const fixture = fixtures.find(fix => fix.name === name);
+    if (!fixture) throw new Error(`Fixture (${name}) failed to load!`);
+    describe(`Fixture: ${fixture.name}`, () => {
+      cb({}, fixture.options);
+    });
+  }
 };
 exports.fixture = fixture;
 const fixturesLoaded = async () => {
-  return Promise.all(fixtures.map(fixture => fixture.ready));
+  Promise.all(fixtures.map(fixture => fixture.ready));
+  return fixtures;
 };
 exports.fixturesLoaded = fixturesLoaded;
 const test = (description, testLogicFn, clean) => {
@@ -401,8 +430,9 @@ const testRemote = (desc, testLogicFn, options) => {
     } else {
       it(`🌎[${remoteName}] ${description}`, async function () {
         this.timeout(10000); //10s default
+        const thisPort = defaultPort++;
         /*const server =*/
-        await launchTestServer('./', defaultPort++);
+        await launchTestServer('./', thisPort);
         if (!remotes[remoteName]) {
           throw new Error(`Remote '${remoteName}' was not found!`);
         }

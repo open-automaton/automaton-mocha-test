@@ -131,6 +131,19 @@ Run a standard mocha test suite, only jobbing out individual tests to headless b
 
 The only real difference in the local output will be icons to show where the tests executed or an environment specific failure in the tests.
 
+Roadmap
+-------
+
+- [ ] - simpler defaults (relaxed by default, and prefix to ..)
+- [ ] - jsdoc (build exists, just need docs)
+- [ ] - integrate wing-kong (share import-map scan+build logic)
+- [ ] - project init
+- [ ] - OS multiplexing (through containers) 
+- [ ] - rhino runtime support
+- [ ] - deno runtime support
+- [ ] - bun runtime support
+
+
 Testing
 -------
 

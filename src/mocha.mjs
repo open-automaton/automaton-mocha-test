@@ -5,6 +5,7 @@
  * @typedef { object } JSON
  */
  
+import { isBrowser, isJsDom } from 'browser-or-node';
 import express from 'express';
 import * as mod from 'module';
 import { getPackage } from '@environment-safe/package';
@@ -218,7 +219,6 @@ export const generateTestBody = (description, testLogicFn)=>{
 let modules = null;
 export const launchTestServer = async (dir, port=8084, map)=>{
     //if(!require) require = mod.createRequire(import.meta.url);
-    
     const app = express();
     if(!modules){
         modules = (await scanPackage(true, args)).modules;
@@ -237,6 +237,15 @@ export const launchTestServer = async (dir, port=8084, map)=>{
             res.send(html);
         }catch(ex){
             console.log(ex);   
+        }
+    });
+    app.get('/fixtures.json', (req, res)=>{
+        try{
+            const result = [];
+            fixtures.forEach((fixture)=> result.push({ name: fixture.name, options: fixture.options }));
+            res.send(JSON.stringify(result));
+        }catch(ex){
+            console.log('!!!', ex);
         }
     });
     return new Promise((resolve, reject)=>{
@@ -273,9 +282,9 @@ export const testHTML = async (testTag, options={})=>{
         <script src="${mochaUrl}"></script>`;
     const init = options.init || `
         <script type="module">
-            mocha.checkLeaks();
-            mocha.globals([]);
-            mocha.run();
+                mocha.checkLeaks();
+                mocha.globals([]);
+                mocha.run();
         </script>
     `;
     const script = options.headless?
@@ -291,6 +300,11 @@ export const testHTML = async (testTag, options={})=>{
                 <base filesystem="${process.cwd()}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n'+mapIndent) || ''}
+                <script type="module">
+                    (async ()=>{
+                        window.fixtures = await (await fetch('/fixtures.json')).json();
+                    })();
+                </script>
                 ${(config['global-shims'] || []).map((url)=> `<script src="${url}"></script>` ).join('')}
             </head>
             <body>
@@ -340,16 +354,26 @@ export const setFixtures = (value)=>{
 };
 
 export const fixture = (name, settings, cb)=>{
-    const fixture = fixtures.find((fix) => fix.name === name);
-    if(!fixture) throw new Error(`Fixture (${name}) failed to load!`);
-    it(`${fixture.name} fixture is loaded`, ()=>{
-        
-    });
-    cb(fixture.fixture, fixture.options);
+    if(isBrowser || isJsDom){
+        if(!window.fixtures) throw new Error('Fixtures failed to load!');
+        const fixtures = window.fixtures;
+        const fixture = fixtures.find((fix) => fix.name === name);
+        if(!fixture) throw new Error(`Fixture (${name}) failed to load!`);
+        describe(`Fixture: ${fixture.name}`, ()=>{
+            cb({}, fixture.options);
+        });
+    }else{
+        const fixture = fixtures.find((fix) => fix.name === name);
+        if(!fixture) throw new Error(`Fixture (${name}) failed to load!`);
+        describe(`Fixture: ${fixture.name}`, ()=>{
+            cb({}, fixture.options);
+        });
+    }
 };
 
 export const fixturesLoaded = async ()=>{
-    return Promise.all(fixtures.map((fixture)=> fixture.ready ));
+    Promise.all(fixtures.map((fixture)=> fixture.ready ));
+    return fixtures;
 };
 
 export const test = (description, testLogicFn, clean)=>{
@@ -449,7 +473,8 @@ export const testRemote = (desc, testLogicFn, options)=>{
         }else{
             it(`🌎[${remoteName}] ${description}`, async function(){
                 this.timeout(10000); //10s default
-                /*const server =*/ await launchTestServer('./', defaultPort++);
+                const thisPort = defaultPort++;
+                /*const server =*/ await launchTestServer('./', thisPort);
                 if(!remotes[remoteName]){
                     throw new Error(`Remote '${remoteName}' was not found!`);
                 }
