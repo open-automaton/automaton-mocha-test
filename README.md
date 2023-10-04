@@ -30,10 +30,9 @@ In addition *all* tests must have a unique name
 
 the easiest path is to set up a simple `.moka` entry then test interactively for problematic dependencies. My hope is that the need for stubs and shims subsides over time.
 
-Additions
----------
-
-Moka gives you access to a few new verbs, in addition to adjusting some of the behavior of the existing ones. One major restriction is *all* test names must be unique. Other than this, it behaves exactly like `mocha`.
+Usage
+-----
+Moka gives you access to a few new verbs, in addition to adjusting some of the behavior of the existing ones. One major restriction is *all* test names must be unique. Other than this and client/server interactions, it behaves like `mocha`.
 
 ### Dialogs
 In some cases you will need to normalize between browser and serve flow differences, one of the primary obstacles is dialogs. `moka` handles this by letting you configure a `dialog` handler which is invoked in environments where it's relevant (the browser). For example, the following code auto-OKs every dialog window:
@@ -54,9 +53,71 @@ In other cases you need a service to be available when the script is executed, b
 For example, a `hello-world-server` fixture would be at: `test/fixtures/hello-world-server.mjs`
 
 ```javascript
+// a minimal server that using sqlite for credential storage
+import { Fixture } from '@open-automaton/moka';
+import express from 'express';
 
+// *always* named `TestFixture`
+export class TestFixture extends Fixture{
+    async createFixture(){
+        const app = express();
+        app.get('/hello', async (req, res) => {
+            res.send('world');
+        });
+        // if you give this a string ending with '+' it increments the port each time
+        this.options.port = Fixture.makePort(this.options.port);
+        return await new Promise((resolve, reject)=>{
+            try{
+                const server = app.listen(this.options.port, (err) => {
+                    if(err) return reject(err);
+                    resolve(server);
+                });
+            }catch(ex){ reject(ex); }
+        });
+    }
+}
 ```
 
+```javascript
+import { it, fixture } from '@open-automaton/moka';
+import { chai } from 'environment-safe-chai';
+const should = chai.should();
+
+describe('my-test', async ()=>{
+    fixture('hello-world-server', { port: '8083+' }, (context, config)=>{
+        it('supplies world, given hello', async ()=>{
+            try{
+                const result = await (await fetch(`http://localhost:${config.port}/hello`)).text();
+                should.exist(result);
+                result.should.equal('world');
+            }catch(ex){
+                should.not.exist(ex);
+            }
+        });
+    });
+});
+```
+
+Now you have a fixture that works in both client and server modes.
+
+### Minimal Example
+
+```javascript
+import { it } from '@open-automaton/moka';
+import { chai } from 'environment-safe-chai';
+const should = chai.should();
+
+describe('environment tests', async ()=>{
+    describe('global objects', ()=>{
+        it('object exists', async ()=>{
+            should.exist(Object);
+        });
+    });
+});
+```
+
+Running the suite
+-----------------
 
 ### Browser targeting by run
 
@@ -65,33 +126,6 @@ In this scenario you have a full test suite which is run in *all* environments (
 ### Browser targeting by test
 
 In this scenario you have an integrated test suite (something like a regression suite), where you want to guarantee conformance across a series of isolated scenarios to prevent regressions in those specific instances. In this case the `it()` function allows the user to specify a `moka` target (defined in your project's package.json) (EX: if I have an entry for `firefox`, I can write a test that targets it with `it('firefox: my test description', ()=>{ /* ... */ } )`). 
-
-Usage
------
-
-
-Given the following test script in `test/foo.mjs`:
-
-```javascript
-import { it, configure } from '@open-automaton/moka';
-import { chai } from 'environment-safe-chai';
-const should = chai.should();
-
-describe('environment tests', async ()=>{
-    describe('global objects', ()=>{
-        it('object exists', async ()=>{
-            configure({
-                foo: "bar"
-            });
-            should.exist(Object);
-        });
-        
-        it('chrome:array exists', async ()=>{
-            should.exist(Array);
-        });
-    });
-});
-```
 
 You can test with `moka` in one of 4 ways:
 
