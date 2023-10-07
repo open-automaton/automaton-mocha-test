@@ -53,7 +53,7 @@ In other cases you need a service to be available when the script is executed, b
 For example, a `hello-world-server` fixture would be at: `test/fixtures/hello-world-server.mjs`
 
 ```javascript
-// a minimal server that using sqlite for credential storage
+// a minimal server
 import { Fixture } from '@open-automaton/moka';
 import express from 'express';
 
@@ -78,16 +78,20 @@ export class TestFixture extends Fixture{
 }
 ```
 
+In the client script you just need to reference the fixture and provide a config (which *must* be a literal):
+
 ```javascript
 import { it, fixture } from '@open-automaton/moka';
 import { chai } from 'environment-safe-chai';
 const should = chai.should();
 
-describe('my-test', async ()=>{
+describe('my-test', ()=>{
     fixture('hello-world-server', { port: '8083+' }, (context, config)=>{
         it('supplies world, given hello', async ()=>{
             try{
-                const result = await (await fetch(`http://localhost:${config.port}/hello`)).text();
+                const result = await (await fetch(
+                    `http://localhost:${config.port}/hello`
+                )).text();
                 should.exist(result);
                 result.should.equal('world');
             }catch(ex){
@@ -107,7 +111,7 @@ import { it } from '@open-automaton/moka';
 import { chai } from 'environment-safe-chai';
 const should = chai.should();
 
-describe('environment tests', async ()=>{
+describe('environment tests', ()=>{
     describe('global objects', ()=>{
         it('object exists', async ()=>{
             should.exist(Object);
@@ -142,7 +146,7 @@ Because `moka` is built on top of mocha, all tests remain compatible and can be 
 This allows you to interactively test using the standard reporter in your browser
 
 ```bash
-    moka --server . --local-browser --relaxed --prefix ../ test/foo.mjs
+    moka --server . --local-browser test/foo.mjs
 ```
 
 ### Headless browser target
@@ -150,7 +154,7 @@ This allows you to interactively test using the standard reporter in your browse
 This runs in a headless browser instance and proxies all the results to a dummy suite executing locally so you still have local access
 
 ```bash
-    moka --browser <target> --relaxed --prefix ../ test/foo.mjs
+    moka --browser <target> test/foo.mjs
 ```
 
 ### Individual browser tests
@@ -158,7 +162,7 @@ This runs in a headless browser instance and proxies all the results to a dummy 
 Run a standard mocha test suite, only jobbing out individual tests to headless browser instances as prefixed on the test description itself. Situations you might want to use this strategy include: a component with a conformance suite where specific browsers are prone to specific issues, functions or behaviors or rely on browser specific interfaces or behaviors (Basic conformance and feature testing is best using a common suite which is then used in a variety of environments).
 
 ```bash
-    moka --relaxed --prefix ../ test/foo.mjs
+    moka test/foo.mjs
 ```
 
 ### Output
@@ -168,7 +172,7 @@ The only real difference in the local output will be icons to show where the tes
 Roadmap
 -------
 
-- [ ] - simpler defaults (relaxed by default, and prefix to ..)
+- [x] - simpler defaults (relaxed by default, and prefix to ..)
 - [ ] - jsdoc (build exists, just need docs)
 - [ ] - integrate wing-kong (share import-map scan+build logic)
 - [ ] - project init

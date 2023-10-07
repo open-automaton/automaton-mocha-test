@@ -8,6 +8,7 @@
 import { isBrowser, isJsDom } from 'browser-or-node';
 import express from 'express';
 import * as mod from 'module';
+import * as os from 'os';
 import { getPackage } from '@environment-safe/package';
 import { mochaEventHandler } from '../src/index.mjs';
 let require = null;
@@ -33,6 +34,7 @@ export const mochaTool = {
                 for(let lcv =0; lcv < files.length; lcv++){
                     work.push(addFile(mocha, files[lcv]));
                 }
+                
                 await Promise.all(work);
                 await mocha.loadFilesAsync();
                 return files;
@@ -217,7 +219,7 @@ export const generateTestBody = (description, testLogicFn)=>{
 };
 
 let modules = null;
-export const launchTestServer = async (dir, port=8084, map)=>{
+export const launchTestServer = async (dir, port=8084, test='/test/test.mjs')=>{
     //if(!require) require = mod.createRequire(import.meta.url);
     const app = express();
     if(!modules){
@@ -226,7 +228,7 @@ export const launchTestServer = async (dir, port=8084, map)=>{
     app.get('/test/index.html', async (req, res)=>{
         try{
             const html = await testHTML(
-                '<script type="module" src="/test/test.mjs"></script>',
+                '<script type="module" src="${test}"></script>',
                 {
                     headless : true,
                     map:`<script type="importmap"> { "imports": ${
@@ -297,7 +299,7 @@ export const testHTML = async (testTag, options={})=>{
         <html>
             <head>
                 <title>Moka Tests</title>
-                <base filesystem="${process.cwd()}">
+                <base filesystem="${process.cwd()}" user="${os.userInfo().username}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n'+mapIndent) || ''}
                 <script type="module">
@@ -474,7 +476,9 @@ export const testRemote = (desc, testLogicFn, options)=>{
             it(`🌎[${remoteName}] ${description}`, async function(){
                 this.timeout(10000); //10s default
                 const thisPort = defaultPort++;
-                /*const server =*/ await launchTestServer('./', thisPort);
+                /*const server =*/ await launchTestServer('./', thisPort, (
+                    options.testScripts && options.testScripts[0]
+                ));
                 if(!remotes[remoteName]){
                     throw new Error(`Remote '${remoteName}' was not found!`);
                 }

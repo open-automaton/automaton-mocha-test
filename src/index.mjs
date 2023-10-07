@@ -110,6 +110,9 @@ export const hashString = (str)=>{
     return theHash;
 };
 
-export const itRemotely = (description, handler, options)=>{
+export const itRemotely = (description, handler, options={})=>{
+    if(isReciever && isReciever.instance && !options.testScripts){
+        options.testScripts = isReciever.instance.files;
+    }
     return testRemote(description, handler, options);
 };

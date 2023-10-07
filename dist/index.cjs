@@ -152,7 +152,10 @@ const hashString = str => {
   return theHash;
 };
 exports.hashString = hashString;
-const itRemotely = (description, handler, options) => {
+const itRemotely = (description, handler, options = {}) => {
+  if (isReciever && isReciever.instance && !options.testScripts) {
+    options.testScripts = isReciever.instance.files;
+  }
   return (0, _mocha.testRemote)(description, handler, options);
 };
 exports.itRemotely = itRemotely;

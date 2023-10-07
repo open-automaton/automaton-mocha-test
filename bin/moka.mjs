@@ -46,7 +46,7 @@ const args = yargs
     })
     .option('p', {
         alias: 'prefix',
-        default: '/',
+        default: '../',
         describe: 'prefix',
         type: 'string'
     })
@@ -72,10 +72,10 @@ const args = yargs
         describe: 'Load all tests in a browser context',
         type: 'string'
     })
-    .option('r', {
-        alias: 'relaxed',
+    .option('t', {
+        alias: 'strict',
         default: false,
-        describe: 'If no module is available, try main' ,
+        describe: 'Unforgiving about syntax and dependencies' ,
         type: 'boolean'
     })
     .option('v', {
@@ -86,6 +86,8 @@ const args = yargs
     })
     .help()
     .argv;
+    
+args.r = !args.t;
 
 const resolveTestSet = (passed)=>{
     const current = process.cwd();
@@ -122,159 +124,136 @@ const resolveTestSet = (passed)=>{
 };
     
 (async ()=>{
-    setPackageArgs(args);
-    setBaseDir('/');
-    const { prePkg } = await scanPackage(true, false);
-    const requireLocation = (prePkg && prePkg.moka && prePkg.moka.require) || args.q;
-    let rqr = require;
-    let rslv = require.resolve;
-    if(requireLocation){
-        const imprt = await import(path.join(process.cwd(), requireLocation));
-        rqr = imprt.require;
-        rslv = imprt.resolve;
-    }
-    registerRequire(rqr, rslv);
-    const { modules, pkg } = await scanPackage(true);
-    if(args.s || args.b){
-        const app = express();
-        const port = 8080;
-        
-        app.use(express.static('.'))
-        
-        app.get('/test/index.html', async (req, res) => {
-            //todo: support deno's deps
-            const html = await testHTML(
-                `<script type="module" src="/test/test.mjs"></script>`,
-                {
-                    headless : !!args.b,
-                    map:`<script type="importmap"> { "imports": ${
-                        JSON.stringify(modules, null, '    ') 
-                    } }</script>`,
-                    config: pkg.moka
-                }
+    try{
+        setPackageArgs(args);
+        setBaseDir('/');
+        const { prePkg } = await scanPackage(true, false);
+        const requireLocation = (prePkg && prePkg.moka && prePkg.moka.require) || args.q;
+        let rqr = require;
+        let rslv = require.resolve;
+        if(requireLocation){
+            const imprt = await import(path.join(process.cwd(), requireLocation));
+            rqr = imprt.require;
+            rslv = imprt.resolve;
+        }
+        registerRequire(rqr, rslv);
+        const { modules, pkg } = await scanPackage(true);
+        const fixtures = {};
+        const getFixture = async (name)=>{
+            if(fixtures[name]) return fixtures[name];
+            const { TestFixture } = await import(
+                `${process.cwd()}/test/fixtures/${name}.mjs`
             );
-            res.send(html);
-        });
-        
-        app.get('/fixtures.json', async (req, res) => {
-            const fixtures = await fixturesLoaded();
-            const result = [];
-            fixtures.forEach((fixture)=> result.push({ name: fixture.name, options: fixture.options }));
-            res.send(JSON.stringify(result));
-        });
-        
-        await new Promise((resolve)=>{
-            app.listen(port, () => {
-                console.log(`Test server running on localhost @ ${port}`)
-                resolve();
-            })
-        });
-    }
-    const fixtures = {};
-    const getFixture = async (name)=>{
-        if(fixtures[name]) return fixtures[name];
-        const { TestFixture } = await import(
-            `${process.cwd()}/test/fixtures/${name}.mjs`
-        );
-        fixtures[name] = TestFixture;
-        return TestFixture;
-    };
-    const setupFixtures = async ()=>{
-        const filesToAdd = resolveTestSet(args._);
-        const fixtureSet = [];
-        await Promise.all(filesToAdd.map((file)=>{
-            return new Promise((resolve, reject)=>{
-                fs.readFile(file, async (err, body)=>{
-                    if(err) return reject(err);
-                    const ast = parser.parse(body.toString(), {
-                        //todo: handle this for cross compile
-                        sourceType: 'module',
-                        plugins: [],
-                    });
-                    traverse(ast, {
-                        CallExpression(path) {
-                            if(path.node.callee.name === 'fixture'){
-                                const name = path.node.arguments[0].value;
-                                const settings = generator(path.node.arguments[1]).code;
-                                let data = '{}';
-                                eval('data = '+settings);
-                                const json = JSON.stringify(data);
-                                fixtureSet.push(new Promise(async (resolve, reject)=>{
-                                    const ThisFixture = await getFixture(name);
-                                    const fixture = new ThisFixture(data);
-                                    fixture.name = name;
-                                    await fixture.ready;
-                                    resolve(fixture);
-                                }));
+            fixtures[name] = TestFixture;
+            return TestFixture;
+        };
+        const setupFixtures = async ()=>{
+            const filesToAdd = resolveTestSet(args._);
+            const fixtureSet = [];
+            await Promise.all(filesToAdd.map((file)=>{
+                return new Promise((resolve, reject)=>{
+                    fs.readFile(file, async (err, body)=>{
+                        if(err) return reject(err);
+                        const ast = parser.parse(body.toString(), {
+                            //todo: handle this for cross compile
+                            sourceType: 'module',
+                            plugins: [],
+                        });
+                        traverse(ast, {
+                            CallExpression(path) {
+                                if(path.node.callee.name === 'fixture'){
+                                    const name = path.node.arguments[0].value;
+                                    const settings = generator(path.node.arguments[1]).code;
+                                    let data = '{}';
+                                    eval('data = '+settings);
+                                    const json = JSON.stringify(data);
+                                    fixtureSet.push(new Promise(async (resolve, reject)=>{
+                                        const ThisFixture = await getFixture(name);
+                                        const fixture = new ThisFixture(data);
+                                        fixture.name = name;
+                                        await fixture.ready;
+                                        resolve(fixture);
+                                    }));
+                                }
                             }
-                        }
+                        });
+                        resolve();
                     });
-                    resolve();
                 });
-            });
-        }));
-        const readyFixtures = await Promise.all(fixtureSet);
-        setFixtures(readyFixtures);
-        return readyFixtures;
-    }
-    if(args.l){
-        const url = getTestURL({ }).replace('8081', '8080');
-        await setupFixtures();
-        exec(`open ${url}`, (error, stdout, stderr) => { });
-        return;
-    }
-    
-    if(args.b){ //we're going to dummy the whole suite to the browser
-        const url = getTestURL({ }).replace('8081', '8080');
-        const remote = getRemote(args.b);
-        setReciever(Mocha);
-        const mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
-        await setupFixtures();
-        await mocha.tool.addAllFiles();
-        mocha.tool.run();
-        remote.fetch({ url }, (err, html)=>{
-            if(err) throw err;
-        });
-    }else{
-        // Standard mocha usage with optional per test callouts
-        const mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
-        await setupFixtures();
-        /*const filesToAdd = resolveTestSet(args._);
-        const fixtureSet = [];
-        await Promise.all(filesToAdd.map((file)=>{
-            return new Promise((resolve, reject)=>{
-                fs.readFile(file, async (err, body)=>{
-                    if(err) return reject(err);
-                    const ast = parser.parse(body.toString(), {
-                        //todo: handle this for cross compile
-                        sourceType: 'module',
-                        plugins: [],
-                    });
-                    traverse(ast, {
-                        CallExpression(path) {
-                            if(path.node.callee.name === 'fixture'){
-                                const name = path.node.arguments[0].value;
-                                const settings = generator(path.node.arguments[1]).code;
-                                let data = '{}';
-                                eval('data = '+settings);
-                                const json = JSON.stringify(data);
-                                fixtureSet.push(new Promise(async (resolve, reject)=>{
-                                    const ThisFixture = await getFixture(name);
-                                    const fixture = new ThisFixture(data);
-                                    fixture.name = name;
-                                    await fixture.ready;
-                                    resolve(fixture);
-                                }));
-                            }
-                        }
-                    });
-                    resolve();
+            }));
+            const readyFixtures = await Promise.all(fixtureSet);
+            setFixtures(readyFixtures);
+            return readyFixtures;
+        }
+        let mocha = null;
+            if(args.b){ //we're going to dummy the whole suite to the browser
+                const url = getTestURL({ }).replace('8081', '8080');
+                const remote = getRemote(args.b);
+                setReciever(Mocha);
+                mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
+                Mocha.instance = mocha;
+                await setupFixtures();
+                await mocha.tool.addAllFiles();
+                remote.fetch({ url }, (err, html)=>{
+                    if(err) throw err;
                 });
+            }else{
+                // Standard mocha usage with optional per test callouts
+                mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
+                await setupFixtures();
+                await mocha.tool.addAllFiles();
+            }
+        if(args.s || args.b){
+            const app = express();
+            const port = 8080;
+            
+            app.use(express.static('.'))
+            
+            app.get('/test/index.html', async (req, res) => {
+                //todo: support deno's deps
+                const testTags = (mocha.files || ['/test/test.mjs']).map(
+                    (file) =>{
+                        const current = process.cwd();
+                        const path = file.indexOf(current) === 0?file.substring(current.length):file;
+                        return `<script type="module" src="${path}"></script>`
+                    }
+                ).join('');
+                const html = await testHTML(
+                    testTags,
+                    {
+                        headless : !!args.b,
+                        
+                        map:`<script type="importmap"> { "imports": ${
+                            JSON.stringify(modules, null, '    ') 
+                        } }</script>`,
+                        config: pkg.moka
+                    }
+                );
+                res.send(html);
             });
-        }));
-        const readyFixtures = await Promise.all(fixtureSet);
-        setFixtures(readyFixtures);*/
-        await mocha.tool.addAllFiles();
-        mocha.tool.run();
+            
+            app.get('/fixtures.json', async (req, res) => {
+                const fixtures = await fixturesLoaded();
+                const result = [];
+                fixtures.forEach((fixture)=> result.push({ name: fixture.name, options: fixture.options }));
+                res.send(JSON.stringify(result));
+            });
+            
+            await new Promise((resolve)=>{
+                app.listen(port, () => {
+                    console.log(`Test server running on localhost @ ${port}`)
+                    resolve();
+                })
+            });
+        }
+        if(args.l){
+            const url = getTestURL({ }).replace('8081', '8080');
+            await setupFixtures();
+            exec(`open ${url}`, (error, stdout, stderr) => { });
+            return;
+        }
+        if(mocha && !args.l) mocha.tool.run();
+    }catch(ex){
+        console.log('ERROR', ex);
     }
 })();

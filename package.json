@@ -1,6 +1,6 @@
 {
     "name": "@open-automaton/moka",
-    "version": "0.2.2",
+    "version": "0.3.0",
     "type": "module",
     "main": "dist/index.mjs",
     "module": "src/index.mjs",
@@ -73,6 +73,7 @@
         "stubs": [
             "express",
             "module",
+            "os",
             "path"
         ],
         "shims": {
@@ -107,7 +108,7 @@
         "require-test": "./node_modules/.bin/mocha test/test.cjs",
         "build-commonjs": "./node_modules/.bin/babel src --out-dir dist --out-file-extension .cjs",
         "headless-browser-test": "npm run headless-chrome-test; npm run headless-firefox-test; npm run headless-safari-test",
-        "headless-chrome-test": "./bin/moka.mjs --server . --browser chrome --relaxed --prefix ../ test/test.mjs",
+        "headless-chrome-test": "./bin/moka.mjs --server . --browser chrome test/test.mjs",
         "headless-firefox-test": "./bin/moka.mjs --server . --browser firefox --relaxed --prefix ../ test/test.mjs",
         "headless-safari-test": "./bin/moka.mjs --server . --browser safari --relaxed --prefix ../ test/test.mjs",
         "browser-test": "./bin/moka.mjs --server . --local-browser --relaxed --prefix ../ test/test.mjs",

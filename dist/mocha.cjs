@@ -7,6 +7,7 @@ exports.testRemote = exports.testHTML = exports.test = exports.setPackageArgs = 
 var _browserOrNode = require("browser-or-node");
 var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
+var os = _interopRequireWildcard(require("os"));
 var _package = require("@environment-safe/package");
 var _index = require("../dist/index.cjs");
 function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
@@ -196,7 +197,7 @@ const generateTestBody = (description, testLogicFn) => {
 };
 exports.generateTestBody = generateTestBody;
 let modules = null;
-const launchTestServer = async (dir, port = 8084, map) => {
+const launchTestServer = async (dir, port = 8084, test = "/test/test.cjs") => {
   //if(!require) require = mod.createRequire(import.meta.url);
   const app = (0, _express.default)();
   if (!modules) {
@@ -204,7 +205,7 @@ const launchTestServer = async (dir, port = 8084, map) => {
   }
   app.get('/test/index.html', async (req, res) => {
     try {
-      const html = await testHTML("<script type=\"module\" src=\"/test/test.cjs\"></script>", {
+      const html = await testHTML('<script type="module" src="${test}"></script>', {
         headless: true,
         map: `<script type="importmap"> { "imports": ${JSON.stringify(modules, null, '    ')} }</script>`
       });
@@ -273,7 +274,7 @@ const testHTML = async (testTag, options = {}) => {
         <html>
             <head>
                 <title>Moka Tests</title>
-                <base filesystem="${process.cwd()}">
+                <base filesystem="${process.cwd()}" user="${os.userInfo().username}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n' + mapIndent) || ''}
                 <script type="module">
@@ -432,7 +433,7 @@ const testRemote = (desc, testLogicFn, options) => {
         this.timeout(10000); //10s default
         const thisPort = defaultPort++;
         /*const server =*/
-        await launchTestServer('./', thisPort);
+        await launchTestServer('./', thisPort, options.testScripts && options.testScripts[0]);
         if (!remotes[remoteName]) {
           throw new Error(`Remote '${remoteName}' was not found!`);
         }
