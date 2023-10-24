@@ -9,6 +9,12 @@ Object.defineProperty(exports, "Fixture", {
     return _mocha.Fixture;
   }
 });
+Object.defineProperty(exports, "bind", {
+  enumerable: true,
+  get: function () {
+    return _mocha.bind;
+  }
+});
 Object.defineProperty(exports, "config", {
   enumerable: true,
   get: function () {
@@ -33,14 +39,20 @@ Object.defineProperty(exports, "fixturesLoaded", {
     return _mocha.fixturesLoaded;
   }
 });
-exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.hashString = void 0;
-var _browserOrNode = require("browser-or-node");
+exports.setReciever = exports.mochaEventHandler = exports.itRemotely = exports.it = exports.isInteractive = exports.interactive = exports.hashString = void 0;
+var _runtimeContext = require("@environment-safe/runtime-context");
 var _mocha = require("./mocha.cjs");
 /**
  * A JSON object
  * @typedef { object } JSON
  */
 
+const isInteractive = _runtimeContext.isBrowser && !globalThis.headlessMoka;
+exports.isInteractive = isInteractive;
+const interactive = (desc, handler) => {
+  if (isInteractive) return it(desc, handler);else it.skip('[NOT INTERACTIVE] ' + desc, handler);
+};
+exports.interactive = interactive;
 let isReciever = false;
 let waiting = {};
 const setReciever = handle => {
@@ -59,8 +71,11 @@ const mochaEventHandler = (type, event) => {
             delete waiting[event.title];
             handle.resolve();
           } else {
-            console.log('unknown event', type, event);
+            //console.log('unknown event', type, event);
           }
+          break;
+        case 'event':
+          //console.log('EVE', type, event);
           break;
         case 'fail':
           if (waiting[event.title]) {
@@ -72,7 +87,7 @@ const mochaEventHandler = (type, event) => {
             error.target = event;
             handle.reject(error);
           } else {
-            console.log('unknown event', type, event);
+            //console.log('unknown event', type, event);
           }
           break;
         case 'start':
@@ -92,7 +107,7 @@ const it = (str, fn) => {
     const handler = typeof str === 'function' ? str : fn;
     const caller = new Error().stack.split('\n')[1].split('//').slice(-1)[0].split(':')[0];
     if (isReciever) {
-      if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+      if (_runtimeContext.isBrowser || _runtimeContext.isJsDom) {
         throw new Error('Reciever mode unsupported in the browser');
       } else {
         const contract = new Promise((resolve, reject) => {
@@ -112,7 +127,7 @@ const it = (str, fn) => {
         });
       }
     } else {
-      if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+      if (_runtimeContext.isBrowser || _runtimeContext.isJsDom) {
         window.it(description, handler);
       } else {
         if (description.indexOf(':') !== -1) {
@@ -131,7 +146,7 @@ const it = (str, fn) => {
 };
 exports.it = it;
 it.skip = (description, handler) => {
-  if (_browserOrNode.isBrowser || _browserOrNode.isJsDom) {
+  if (_runtimeContext.isBrowser || _runtimeContext.isJsDom) {
     window.it.skip(description, handler);
   } else {
     return _mocha.test.skip(description, handler);

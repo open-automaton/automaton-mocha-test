@@ -8,7 +8,7 @@ const Mocha = require('mocha');
 const express = require('express');
 import { scanImports, setBaseDir } from '@environment-safe/import-introspect';
 import { getPackage } from '@environment-safe/package';
-import { registerRequire, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs, setFixtures, fixturesLoaded } from '../src/mocha.mjs';
+import { bindContexts, registerRequire, getTestURL, testHTML, getRemote, mochaTool, scanPackage, setPackageArgs, setFixtures, fixturesLoaded } from '../src/mocha.mjs';
 import { mochaEventHandler, setReciever, config } from '../src/index.mjs';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -44,6 +44,12 @@ const args = yargs
         describe: 'the path to serve as root',
         type: 'string'
     })
+    .option('f', {
+        alias: 'file',
+        default: 'test/test.html',
+        describe: 'use a file:// url instead of serving',
+        type: 'string'
+    })
     .option('p', {
         alias: 'prefix',
         default: '../',
@@ -72,6 +78,16 @@ const args = yargs
         describe: 'Load all tests in a browser context',
         type: 'string'
     })
+    .option('h', {
+        alias: 'head',
+        describe: 'Show browser context while running',
+        type: 'boolean'
+    })
+    .option('o', {
+        alias: 'open',
+        describe: 'leave the browser context running',
+        type: 'boolean'
+    })
     .option('t', {
         alias: 'strict',
         default: false,
@@ -94,7 +110,7 @@ const resolveTestSet = (passed)=>{
     const results = [];
     if(passed.length){
         for(let lcv=0; lcv < passed.length; lcv++ ){
-            if(passed[lcv][0] === '/'){
+            if(passed[lcv][0] === '/' || passed[lcv].indexOf('://') !== -1){
                 results.push(passed[lcv]);
             }else{
                 results.push(path.join(current, passed[lcv]));
@@ -125,8 +141,13 @@ const resolveTestSet = (passed)=>{
     
 (async ()=>{
     try{
+        if(args.v) console.log('MOKA RUNNING');
         setPackageArgs(args);
         setBaseDir('/');
+        if(args.h){
+            globalThis.forceHeadless = false;
+        }
+        if(args.v) console.log('INITIAL SCAN');
         const { prePkg } = await scanPackage(true, false);
         const requireLocation = (prePkg && prePkg.moka && prePkg.moka.require) || args.q;
         let rqr = require;
@@ -137,6 +158,7 @@ const resolveTestSet = (passed)=>{
             rslv = imprt.resolve;
         }
         registerRequire(rqr, rslv);
+        if(args.v) console.log('SECOND PASS SCAN');
         const { modules, pkg } = await scanPackage(true);
         const fixtures = {};
         const getFixture = async (name)=>{
@@ -148,9 +170,11 @@ const resolveTestSet = (passed)=>{
             return TestFixture;
         };
         const setupFixtures = async ()=>{
+            if(args.v) console.log('LAUNCHING FIXTURES', (new Error()).stack);
             const filesToAdd = resolveTestSet(args._);
             const fixtureSet = [];
-            await Promise.all(filesToAdd.map((file)=>{
+            await Promise.all(filesToAdd.map((path)=>{
+                const file = path.indexOf('file://') === 0?path.substring(7):path;
                 return new Promise((resolve, reject)=>{
                     fs.readFile(file, async (err, body)=>{
                         if(err) return reject(err);
@@ -168,6 +192,7 @@ const resolveTestSet = (passed)=>{
                                     eval('data = '+settings);
                                     const json = JSON.stringify(data);
                                     fixtureSet.push(new Promise(async (resolve, reject)=>{
+                                        if(args.v) console.log(`FIXTURE ${name} LAUNCHED`);
                                         const ThisFixture = await getFixture(name);
                                         const fixture = new ThisFixture(data);
                                         fixture.name = name;
@@ -186,24 +211,48 @@ const resolveTestSet = (passed)=>{
             return readyFixtures;
         }
         let mocha = null;
-            if(args.b){ //we're going to dummy the whole suite to the browser
-                const url = getTestURL({ }).replace('8081', '8080');
-                const remote = getRemote(args.b);
-                setReciever(Mocha);
-                mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
-                Mocha.instance = mocha;
-                await setupFixtures();
-                await mocha.tool.addAllFiles();
-                remote.fetch({ url }, (err, html)=>{
-                    if(err) throw err;
-                });
-            }else{
-                // Standard mocha usage with optional per test callouts
-                mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
-                await setupFixtures();
-                await mocha.tool.addAllFiles();
-            }
+        if(args.b){ //we're going to dummy the whole suite to the browser
+            if(args.v) console.log('EXECUTING IN BROWSER');
+            const url = getTestURL({ engine: args.b }).replace('8081', '8080');
+            const remote = getRemote(args.b);
+            setReciever(Mocha);
+            mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
+            Mocha.instance = mocha;
+            await setupFixtures();
+            await mocha.tool.addAllFiles();
+            remote.fetch({ url }, (err, html)=>{
+                if(err) throw err;
+            });
+        }else{
+            if(args.v) console.log('EXECUTING LOCALLY');
+            // Standard mocha usage with optional per test callouts
+            mocha = mochaTool.init(Mocha, args, resolveTestSet, scanImports, logRunningOnClose);
+            await setupFixtures();
+            await mocha.tool.addAllFiles();
+        }
+        const makeHTML = async ()=>{
+            const testTags = (mocha.files || ['/test/test.mjs']).map(
+                (file) =>{
+                    const current = process.cwd();
+                    const path = file.indexOf(current) === 0?file.substring(current.length):file;
+                    return `<script type="module" src="${path}"></script>`
+                }
+            ).join('');
+            const html = await testHTML(
+                testTags,
+                {
+                    headless : !!args.b,
+                    
+                    map:`<script type="importmap"> { "imports": ${
+                        JSON.stringify(modules, null, '    ') 
+                    } }</script>`,
+                    config: pkg.moka
+                }
+            );
+            return html;
+        };
         if(args.s || args.b){
+            if(args.v) console.log('LAUNCHING SERVER');
             const app = express();
             const port = 8080;
             
@@ -211,24 +260,7 @@ const resolveTestSet = (passed)=>{
             
             app.get('/test/index.html', async (req, res) => {
                 //todo: support deno's deps
-                const testTags = (mocha.files || ['/test/test.mjs']).map(
-                    (file) =>{
-                        const current = process.cwd();
-                        const path = file.indexOf(current) === 0?file.substring(current.length):file;
-                        return `<script type="module" src="${path}"></script>`
-                    }
-                ).join('');
-                const html = await testHTML(
-                    testTags,
-                    {
-                        headless : !!args.b,
-                        
-                        map:`<script type="importmap"> { "imports": ${
-                            JSON.stringify(modules, null, '    ') 
-                        } }</script>`,
-                        config: pkg.moka
-                    }
-                );
+                const html = await makeHTML();
                 res.send(html);
             });
             
@@ -239,6 +271,61 @@ const resolveTestSet = (passed)=>{
                 res.send(JSON.stringify(result));
             });
             
+            app.get('/event', async (req, res) => {
+                try{
+                    if(req.query.engine){
+                        const remote = getRemote(req.query.engine);
+                        const selector = req.query.selector || 'body';
+                        const action = req.query.type || 'click';
+                        if(action === 'confirm'){
+                            //setTimeout(()=>{
+                                remote.type(['o'], ['Meta'], (err)=>{
+                                    if(err){
+                                        res.send(JSON.stringify({ success:false, error: err.message }));
+                                    }else{
+                                        res.send(JSON.stringify({ success:true }));
+                                    }
+                                });
+                            //}, 3000); 
+                        }
+                        if(action === 'cancel'){
+                            //todo: OS specific hotkeys?
+                            remote.type(['Escape'], [], (err)=>{
+                                if(err){
+                                    res.send(JSON.stringify({ success:false, error: err.message }));
+                                }else{
+                                    res.send(JSON.stringify({ success:true }));
+                                }
+                            }); 
+                        }
+                        remote.trigger(action, selector, (err)=>{
+                            if(err){
+                                res.send(JSON.stringify({ success:false, error: err.message }));
+                            }else{
+                                res.send(JSON.stringify({ success:true }));
+                            }
+                        });
+                    }
+                    res.send(JSON.stringify({ success:true }));
+                }catch(ex){
+                    res.send(JSON.stringify({ success:false, error: ex.message }));
+                }
+            });
+            
+            app.get('/events.json', (req, res)=>{
+                try{
+                    //bindContexts
+                    const result = bindContexts.map(
+                        context=>context.events
+                    ).reduce(
+                        (list, local)=> list.concat(local)
+                    );
+                    res.send(JSON.stringify(result));
+                }catch(ex){
+                    console.log('!!!', ex);
+                }
+            });
+            
             await new Promise((resolve)=>{
                 app.listen(port, () => {
                     console.log(`Test server running on localhost @ ${port}`)
@@ -246,9 +333,22 @@ const resolveTestSet = (passed)=>{
                 })
             });
         }
+        if(args.f){
+            if(args.v) console.log('SAVING HTML');
+            const file = args.f.indexOf('file://') === 0?args.f.substring(7):args.f;
+            await new Promise(async (resolve, reject)=>{
+                const body = await makeHTML();
+                fs.writeFile(file, body, (err)=>{
+                    if(err) return reject(err);
+                    resolve();
+                })
+            });
+        }
         if(args.l){
+            if(args.v) console.log('OPENING LOCAL BROWSER');
             const url = getTestURL({ }).replace('8081', '8080');
-            await setupFixtures();
+            //await setupFixtures();
+            if(args.v) console.log(`open ${url}`);
             exec(`open ${url}`, (error, stdout, stderr) => { });
             return;
         }

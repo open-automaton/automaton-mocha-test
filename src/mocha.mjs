@@ -5,7 +5,12 @@
  * @typedef { object } JSON
  */
  
-import { isBrowser, isJsDom } from 'browser-or-node';
+//import { isBrowser, isJsDom } from 'browser-or-node';
+import { 
+    isBrowser,
+    isJsDom,
+    variables
+} from '@environment-safe/runtime-context';
 import express from 'express';
 import * as mod from 'module';
 import * as os from 'os';
@@ -13,6 +18,10 @@ import { getPackage } from '@environment-safe/package';
 import { mochaEventHandler } from '../src/index.mjs';
 let require = null;
 let resolve = null;
+
+export const config = {
+    //todo: defaults
+};
 
 export const mochaTool = {
     init : (Mocha, args, resolveTestSet, scanImports, logRunningOnClose)=>{
@@ -43,11 +52,13 @@ export const mochaTool = {
                 mocha.run(function(failures){
                     
                     if(args.v || args.d) logRunningOnClose();
-                    if(!args.d) process.exit(failures);
-                    else{
-                        process.on('exit', function(){
-                            process.exit(failures);  // exit with non-zero status if there were failures
-                        });
+                    if(!args.o){
+                        if(!args.d) process.exit(failures);
+                        else{
+                            process.on('exit', function(){
+                                process.exit(failures?1:0);  // exit with non-zero status if there were failures
+                            });
+                        }
                     }
                 });
             },
@@ -140,12 +151,16 @@ export const scanPackage = async(includeRemotes, includeDeps=true)=>{
     }
     if(includeRemotes){
         if(!pkg.moka) throw new Error('.moka entry not found in package!');
+        const headless = globalThis.forceHeadless===null?(
+            pkg.moka.headless === null?false:pkg.moka.headless
+        ):globalThis.forceHeadless;
         Object.keys(pkg.moka).forEach((key)=>{
             if(
                 key === 'stub' || 
                 key === 'stubs' || 
                 key === 'require' || 
                 key === 'shims' || 
+                key === 'headless' || 
                 key === 'global-shims'
             ) return;
             const data = pkg.moka[key];
@@ -168,6 +183,7 @@ export const scanPackage = async(includeRemotes, includeDeps=true)=>{
             options.onError = (event)=>{
                 mochaEventHandler(event);
             };
+            options.headless = headless;
             registerRemote(key, data.engine, options);
         });
     }
@@ -180,6 +196,9 @@ export const scanPackage = async(includeRemotes, includeDeps=true)=>{
         Object.keys(pkg.moka.shims).forEach((shim)=>{
             modules[shim] = args.p + pkg.moka.shims[shim];
         });
+    }
+    if(!modules[pkg.name]){
+        modules[pkg.name] = '../src/index.mjs';
     }
     return { modules, pkg };
 };
@@ -242,9 +261,18 @@ export const launchTestServer = async (dir, port=8084, test='/test/test.mjs')=>{
         }
     });
     app.get('/fixtures.json', (req, res)=>{
+        const result = [];
+        fixtures.forEach((fixture)=> result.push({ name: fixture.name, options: fixture.options }));
+        res.send(JSON.stringify(result));
+    });
+    app.get('/events.json', (req, res)=>{
         try{
-            const result = [];
-            fixtures.forEach((fixture)=> result.push({ name: fixture.name, options: fixture.options }));
+            //bindContexts
+            const result = bindContexts.map(
+                context=>context.events
+            ).reduce(
+                (list, local)=> list.concat(local)
+            );
             res.send(JSON.stringify(result));
         }catch(ex){
             console.log('!!!', ex);
@@ -284,9 +312,11 @@ export const testHTML = async (testTag, options={})=>{
         <script src="${mochaUrl}"></script>`;
     const init = options.init || `
         <script type="module">
-                mocha.checkLeaks();
-                mocha.globals([]);
-                mocha.run();
+            import { bind } from '@open-automaton/moka';
+            window.moka = { bind };
+            mocha.checkLeaks();
+            mocha.globals([]);
+            mocha.run();
         </script>
     `;
     const script = options.headless?
@@ -306,10 +336,19 @@ export const testHTML = async (testTag, options={})=>{
                     (async ()=>{
                         window.fixtures = await (await fetch('/fixtures.json')).json();
                     })();
+                    /*(async ()=>{
+                        window.testEvents = await (await fetch('/events.json')).json();
+                        window.testEvents.forEach((eventType)=>{
+                            document.body.addEventListener(eventType, (event)=>{
+                                console.log('event', JSON.stringify([eventType, event]) );
+                            });
+                        });
+                    })();*/
                 </script>
                 ${(config['global-shims'] || []).map((url)=> `<script src="${url}"></script>` ).join('')}
             </head>
             <body>
+                <input id="dummy-button" type="button" value="Add to favorites" >
                 ${testLibs}
                 ${dependencies || ''}
                 ${ options.testLibs || script || '' }
@@ -420,11 +459,134 @@ export const setDefaultPort = (port)=>{
     nextPort = defaultPort;
 };
 
-export const config = {
-    //todo: defaults
+const remoteKeys = ['dialog'];
+
+const inputQueue = [];
+
+/*let inputHandler = (event, inputQueue)=>{
+    if(inputQueue.length){
+        const input = inputQueue.shift();
+        try{
+            input.handler(event, input.resolve, input.reject);
+        }catch(ex){
+            inputQueue.unshift(input);
+        }
+    }
+};*/
+
+export let bindContexts = [];
+
+const bindEventContext = (eventType, handler)=>{
+    if(isBrowser || isJsDom){
+        bindContexts.push({
+            bind : (context)=>{
+                document.body.addEventListener(eventType, handler, false);
+            },
+            events : ['mousedown']
+        });
+        bindContexts[bindContexts.length-1].bind();
+    }else{
+        bindContexts.push({
+            bind : (context)=>{
+            },
+            events : ['mousedown']
+        });
+    }
 };
 
-const remoteKeys = ['dialog'];
+
+//EVENT BINDING
+export const bind = (createContext)=>{
+    const selector = '#dummy-button';
+    const searchParams = new URLSearchParams(variables.location && variables.location.search);
+    const actions = {
+        click : async ()=>{
+            await fetch(`/event?engine=${
+                searchParams.get('engine')
+            }&type=click&selector=${
+                encodeURIComponent(selector)
+            }`);
+        },
+        doubleclick : async ()=>{
+            await fetch(`/event?engine=${
+                searchParams.get('engine')
+            }&type=doubleclick&selector=${
+                encodeURIComponent(selector)
+            }`);
+        },
+        rightclick : async ()=>{
+            await fetch(`/event?engine=${
+                searchParams.get('engine')
+            }&type=rightclick&selector=${
+                encodeURIComponent(selector)
+            }`);
+        }
+    };
+    const wantInput = async (type, id, handler)=>{
+        let entry = { handler };
+        const promise = new Promise((resolve, reject)=>{
+            entry.resolve = resolve;
+            entry.reject = reject;
+            inputQueue.push(entry);
+        });
+        (async ()=>{
+            //const searchParams = new URLSearchParams(window.location.search);
+            /*const response = await fetch(`/event?engine=${
+                searchParams.get('engine')
+            }&type=${type}&selector=${
+                encodeURIComponent(selector)
+            }`);*/
+            //const html = await response.text();
+            //entry.resolve();
+            const contextConfig = {type};
+            if(config.wantsInput){
+                config.wantsInput(contextConfig, actions);
+                if(config.dialog){
+                    setTimeout(()=>{
+                        config.dialog({}, {
+                            confirm: async ()=>{
+                                const response = await fetch(`/event?engine=${
+                                    searchParams.get('engine')
+                                }&type=confirm&selector=${
+                                    encodeURIComponent(selector)
+                                }`);
+                                const data = await response.json();
+                                if(data.success){
+                                    console.log('this was a confirm');
+                                }else{
+                                    console.log('PROBLEM', data);
+                                }
+                            },
+                            cancel: async ()=>{
+                                
+                            }
+                        });
+                    }, 2000);
+                }
+            }
+        })();
+        const input = await promise;
+        return await input;
+    };
+    const context = createContext(wantInput);
+    
+    Object.keys(context).forEach((eventType)=>{
+        bindEventContext(eventType, (event)=>{
+            const contextConfig = {type: eventType};
+            context[eventType](contextConfig, actions);
+            const entry = inputQueue.shift();
+            try{
+                entry.resolve();
+            }catch(ex){
+                inputQueue.unshift(entry);
+            }
+        });
+    });
+    
+    
+};
+
+variables.moka = { bind };
 
 export const configure = (values)=>{
     Object.keys(values).forEach((key)=>{
@@ -433,6 +595,10 @@ export const configure = (values)=>{
             Object.keys(remotes).forEach((remoteKey)=>{
                 remotes[remoteKey].options[key] = values[key];
             });
+        }
+        if(key === 'downloads'){
+            //TODO: remove this magical global
+            globalThis.handleDownload = values[key];
         }
     });
 };
@@ -446,7 +612,7 @@ export const getTestURL = (options)=>{
         options.port || defaultPort
     }/test/index.html?script=${
         options.caller || 'test/test.mjs'
-    }&grep=${
+    }&engine=${options.engine || 'unknown'}&grep=${
         options.description?
             encodeURIComponent(options.description):
             ''
@@ -494,6 +660,7 @@ export const testRemote = (desc, testLogicFn, options)=>{
                         }
                         resolve(data);
                         //server.close();
+                        
                     });
                     //remotes[remoteName].
                 });

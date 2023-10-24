@@ -4,35 +4,28 @@ A mocha test runner with browsers baked in, designed for native esmodule develop
 
 Best coupled with [environment-safe modules](https://github.com/environment-safe).
 
-Configuration - The Easy Way
-----------------------------
+Configuration
+-------------
 
+### The Easy Way
 Create a project using [@environment-safe/template](https://github.com/environment-safe/template).
 
 when you are done you can run `npm run browser-test` to launch an interactive test in your browser, `npm run headless-browser-test` to run the suite in chrome, firefox and safari (all powered by `moka`) and then `npm run import-test` to run a standard mocha test.
 
 Everything's set up and ready to go.
 
-Configuration - From Scratch
-----------------------------
+### From Scratch
 
-First, unless you are using shims, moka **requires** that your local paths match your repo names. If your projects directory is `/devroot` then module `foo` should be at `/devroot/foo/` and `@bar/baz` must be at `/devroot/@bar/baz`. If you are using multiple instances of projects, you'll need to set up a symlinking scheme yourself.
-
- You'll also need a dependency, [detect-browser](https://www.npmjs.com/package/detect-browser) :
- 
- ```bash
- npm install --save-dev detect-browser
- ```
-
-Before using `moka` you need to add it's configuration to your `package.json` you need to define a set of targets as well as any packages you will be stubbing ( substituting a dummy module for, because it isn't actually in the executed browser code path) and shimming (providing an explicit location for a given package). `moka`'s own `package.json` is [a good example of how this might look](https://github.com/open-automaton/moka/blob/master/package.json#L53-L83), because the package tests itself.
-
-In addition *all* tests must have a unique name
-
-the easiest path is to set up a simple `.moka` entry then test interactively for problematic dependencies. My hope is that the need for stubs and shims subsides over time.
+Use the [custom configuration docs](docs/scratch.md) to integrate `moka` into your own project/boilerplate/framework.
 
 Usage
 -----
 Moka gives you access to a few new verbs, in addition to adjusting some of the behavior of the existing ones. One major restriction is *all* test names must be unique. Other than this and client/server interactions, it behaves like `mocha`.
+
+### `interactive()`
+In some cases there are OS restrictions preventing the logic from being testable any other way but interactively. In those cases you can use `interactive` in place of `it` and the tests will be run or skipped based on the headless settings or environment.
+
+`configure()` calls must be run outside the `it()` call to take effect (we can't configure the browser if we're *in* the browser!).
 
 ### Dialogs
 In some cases you will need to normalize between browser and serve flow differences, one of the primary obstacles is dialogs. `moka` handles this by letting you configure a `dialog` handler which is invoked in environments where it's relevant (the browser). For example, the following code auto-OKs every dialog window:
@@ -45,7 +38,27 @@ configure({
 });
 ```
 
-These must be run outside the `it()` call to take effect (we can't configure the browser if we're *in* the browser!).
+### Input Driven Actions
+Some actions in the browser are required to initiate from a user spawned event, we allow for generating these needed action on-the-fly (often these actions result in a dialog, making `wantsInput` work in conjunction with `dialog`)
+
+```javascript
+configure({
+    wantsInput : (context, actions)=>{
+        if(context.type === 'click') actions.click();
+    } 
+});
+```
+
+### Download
+You'll also note that you can take action on downloads
+
+```javascript
+configure({
+    downloads : (download)=>{
+        //do something
+    } 
+});
+```
 
 ### Fixtures
 In other cases you need a service to be available when the script is executed, but you want to *define* the service config in the script itself. this catch-22 is one of the main things that leads people to bolt on things to mocha and build their own alternate, but-almost-the-same test technology. Standard Mocha fixtures continue to work, but are challenging to use for cross environment contexts.
@@ -82,7 +95,7 @@ In the client script you just need to reference the fixture and provide a config
 
 ```javascript
 import { it, fixture } from '@open-automaton/moka';
-import { chai } from 'environment-safe-chai';
+import { chai } from '@environment-safe/chai';
 const should = chai.should();
 
 describe('my-test', ()=>{
@@ -108,7 +121,7 @@ Now you have a fixture that works in both client and server modes.
 
 ```javascript
 import { it } from '@open-automaton/moka';
-import { chai } from 'environment-safe-chai';
+import { chai } from '@environment-safe/chai';
 const should = chai.should();
 
 describe('environment tests', ()=>{
@@ -157,6 +170,12 @@ This runs in a headless browser instance and proxies all the results to a dummy 
     moka --browser <target> test/foo.mjs
 ```
 
+and if I wanted to be able to inspect the output during/after the run:
+
+```bash
+    moka --browser <target> test/foo.mjs --open --head
+```
+
 ### Individual browser tests
 
 Run a standard mocha test suite, only jobbing out individual tests to headless browser instances as prefixed on the test description itself. Situations you might want to use this strategy include: a component with a conformance suite where specific browsers are prone to specific issues, functions or behaviors or rely on browser specific interfaces or behaviors (Basic conformance and feature testing is best using a common suite which is then used in a variety of environments).
@@ -173,6 +192,9 @@ Roadmap
 -------
 
 - [x] - simpler defaults (relaxed by default, and prefix to ..)
+- [x] - download handling, `wantsInput` handler for user input
+- [x] - `interactive()`
+- [x] - head state exposed, stay open exposed
 - [ ] - jsdoc (build exists, just need docs)
 - [ ] - integrate wing-kong (share import-map scan+build logic)
 - [ ] - project init

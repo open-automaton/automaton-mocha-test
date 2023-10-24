@@ -16,7 +16,6 @@ describe('module', async ()=>{
                 actions.confirm();
             } 
         });
-        
         it('loads', async ()=>{
             const outputs = [];
             const resetInput = intercept((str)=>{

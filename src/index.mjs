@@ -1,11 +1,25 @@
-import { isBrowser, isJsDom } from 'browser-or-node';
-import { test, testRemote, configure, config, fixture, fixturesLoaded, Fixture } from './mocha.mjs';
+import { 
+    isBrowser,
+    isJsDom
+} from '@environment-safe/runtime-context';
+import { test, testRemote, configure, bind, config, fixture, fixturesLoaded, Fixture } from './mocha.mjs';
 /**
  * A JSON object
  * @typedef { object } JSON
  */
+ 
+ 
+ 
 
-export { configure, config, fixture, fixturesLoaded, Fixture };
+export { configure, config, bind, fixture, fixturesLoaded, Fixture };
+
+export const isInteractive = isBrowser && !globalThis.headlessMoka;
+
+export const interactive = (desc, handler)=>{
+    if(isInteractive) return it(desc, handler);
+    else it.skip('[NOT INTERACTIVE] '+desc, handler);
+};
+
 let isReciever = false;
 let waiting = {};
 
@@ -25,8 +39,11 @@ export const mochaEventHandler = (type, event)=>{
                         delete waiting[event.title];
                         handle.resolve();
                     }else{
-                        console.log('unknown event', type, event);
+                        //console.log('unknown event', type, event);
                     }
+                    break;
+                case 'event':
+                    //console.log('EVE', type, event);
                     break;
                 case 'fail':
                     if(waiting[event.title]){
@@ -38,7 +55,7 @@ export const mochaEventHandler = (type, event)=>{
                         error.target = event;
                         handle.reject(error);
                     }else{
-                        console.log('unknown event', type, event);
+                        //console.log('unknown event', type, event);
                     }
                     break;
                 case 'start':
