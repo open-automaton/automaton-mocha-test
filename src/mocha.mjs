@@ -348,7 +348,6 @@ export const testHTML = async (testTag, options={})=>{
                 ${(config['global-shims'] || []).map((url)=> `<script src="${url}"></script>` ).join('')}
             </head>
             <body>
-                <input id="dummy-button" type="button" value="Add to favorites" >
                 ${testLibs}
                 ${dependencies || ''}
                 ${ options.testLibs || script || '' }
