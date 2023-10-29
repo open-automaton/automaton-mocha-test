@@ -25,9 +25,10 @@ Moka gives you access to a few new verbs, in addition to adjusting some of the b
 ### `interactive()`
 In some cases there are OS restrictions preventing the logic from being testable any other way but interactively. In those cases you can use `interactive` in place of `it` and the tests will be run or skipped based on the headless settings or environment.
 
+### `configure()`
 `configure()` calls must be run outside the `it()` call to take effect (we can't configure the browser if we're *in* the browser!).
 
-### Dialogs
+### `config.dialog`
 In some cases you will need to normalize between browser and serve flow differences, one of the primary obstacles is dialogs. `moka` handles this by letting you configure a `dialog` handler which is invoked in environments where it's relevant (the browser). For example, the following code auto-OKs every dialog window:
 
 ```javascript
@@ -38,7 +39,7 @@ configure({
 });
 ```
 
-### Input Driven Actions
+### `config.wantsInput`
 Some actions in the browser are required to initiate from a user spawned event, we allow for generating these needed action on-the-fly (often these actions result in a dialog, making `wantsInput` work in conjunction with `dialog`)
 
 ```javascript
@@ -49,7 +50,7 @@ configure({
 });
 ```
 
-### Download
+### `config.downloads`
 You'll also note that you can take action on downloads
 
 ```javascript
