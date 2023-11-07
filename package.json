@@ -1,6 +1,6 @@
 {
     "name": "@open-automaton/moka",
-    "version": "0.4.1",
+    "version": "0.4.2",
     "type": "module",
     "main": "dist/index.mjs",
     "module": "src/index.mjs",
@@ -128,7 +128,7 @@
         "@open-automaton/automaton": "^0.1.0",
         "@open-automaton/cheerio-mining-engine": "^0.0.8",
         "@open-automaton/jsdom-mining-engine": "^0.0.1",
-        "@open-automaton/playwright-mining-engine": "^0.4.0",
+        "@open-automaton/playwright-mining-engine": "^0.4.1",
         "@open-automaton/puppeteer-mining-engine": "^0.0.8",
         "browser-or-node": "^2.1.1",
         "detect-browser": "^5.3.0",
