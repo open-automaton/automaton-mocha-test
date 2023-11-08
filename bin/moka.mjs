@@ -46,7 +46,6 @@ const args = yargs
     })
     .option('f', {
         alias: 'file',
-        default: 'test/test.html',
         describe: 'use a file:// url instead of serving',
         type: 'string'
     })
@@ -104,6 +103,8 @@ const args = yargs
     .argv;
     
 args.r = !args.t;
+//make absolute before we shift to the test's dir to execute
+if(args.s === '.') args.s = process.cwd();
 
 const resolveTestSet = (passed)=>{
     const current = process.cwd();
@@ -148,7 +149,7 @@ const resolveTestSet = (passed)=>{
             globalThis.forceHeadless = false;
         }
         if(args.v) console.log('INITIAL SCAN');
-        const { prePkg } = await scanPackage(true, false);
+        const { prePkg } = await scanPackage(true, false, args.s);
         const requireLocation = (prePkg && prePkg.moka && prePkg.moka.require) || args.q;
         let rqr = require;
         let rslv = require.resolve;
@@ -159,7 +160,7 @@ const resolveTestSet = (passed)=>{
         }
         registerRequire(rqr, rslv);
         if(args.v) console.log('SECOND PASS SCAN');
-        const { modules, pkg } = await scanPackage(true);
+        const { modules, pkg } = await scanPackage(true, true, args.s);
         const fixtures = {};
         const getFixture = async (name)=>{
             if(fixtures[name]) return fixtures[name];
@@ -233,7 +234,7 @@ const resolveTestSet = (passed)=>{
         const makeHTML = async ()=>{
             const testTags = (mocha.files || ['/test/test.mjs']).map(
                 (file) =>{
-                    const current = process.cwd();
+                    const current = args.s || process.cwd();
                     const path = file.indexOf(current) === 0?file.substring(current.length):file;
                     return `<script type="module" src="${path}"></script>`
                 }
@@ -242,7 +243,7 @@ const resolveTestSet = (passed)=>{
                 testTags,
                 {
                     headless : !!args.b,
-                    
+                    root: (args.s || process.cwd()),
                     map:`<script type="importmap"> { "imports": ${
                         JSON.stringify(modules, null, '    ') 
                     } }</script>`,
@@ -256,7 +257,7 @@ const resolveTestSet = (passed)=>{
             const app = express();
             const port = 8080;
             
-            app.use(express.static('.'))
+            app.use(express.static(args.s))
             
             app.get('/test/index.html', async (req, res) => {
                 //todo: support deno's deps
@@ -335,6 +336,7 @@ const resolveTestSet = (passed)=>{
         }
         if(args.f){
             if(args.v) console.log('SAVING HTML');
+            console.log('SAVING HTML');
             const file = args.f.indexOf('file://') === 0?args.f.substring(7):args.f;
             await new Promise(async (resolve, reject)=>{
                 const body = await makeHTML();
@@ -354,6 +356,6 @@ const resolveTestSet = (passed)=>{
         }
         if(mocha && !args.l) mocha.tool.run();
     }catch(ex){
-        console.log('ERROR', ex);
+        console.log('ERROR', ex, '@');
     }
 })();

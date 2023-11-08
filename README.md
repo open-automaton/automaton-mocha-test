@@ -56,7 +56,18 @@ You'll also note that you can take action on downloads
 ```javascript
 configure({
     downloads : (download)=>{
-        //do something
+        // do something with download.text() or download.arrayBuffer()
+    } 
+});
+```
+
+### `config.write`
+Similar to downloads you can take action on file write
+
+```javascript
+configure({
+    write : (meta)=>{
+        // do something with meta.text() or meta.arrayBuffer()
     } 
 });
 ```

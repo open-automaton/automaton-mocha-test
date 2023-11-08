@@ -9,6 +9,7 @@ var _express = _interopRequireDefault(require("express"));
 var mod = _interopRequireWildcard(require("module"));
 var os = _interopRequireWildcard(require("os"));
 var _package = require("@environment-safe/package");
+var _file = require("@environment-safe/file");
 var _index = require("../dist/index.cjs");
 function _getRequireWildcardCache(nodeInterop) { if (typeof WeakMap !== "function") return null; var cacheBabelInterop = new WeakMap(); var cacheNodeInterop = new WeakMap(); return (_getRequireWildcardCache = function (nodeInterop) { return nodeInterop ? cacheNodeInterop : cacheBabelInterop; })(nodeInterop); }
 function _interopRequireWildcard(obj, nodeInterop) { if (!nodeInterop && obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(nodeInterop); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (key !== "default" && Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
@@ -41,18 +42,27 @@ const mochaTool = {
       return mocha.addFile(fileName);
     };
     const mocha = new Mocha();
+    let workingDir = null; //TODO: support multiple files in multiple locations
     mocha.tool = {
       addAllFiles: async () => {
         const files = await resolveTestSet(args._);
         const work = [];
+        let workingDir = null; //TODO: support multiple files in multiple locations
         for (let lcv = 0; lcv < files.length; lcv++) {
           work.push(addFile(mocha, files[lcv]));
+          if (!workingDir) workingDir = _file.Path.parent(files[lcv]);
+        }
+        if (workingDir) {
+          process.chdir(workingDir);
         }
         await Promise.all(work);
         await mocha.loadFilesAsync();
         return files;
       },
       run: () => {
+        if (workingDir) {
+          process.chdir(workingDir);
+        }
         mocha.run(function (failures) {
           if (args.v || args.d) logRunningOnClose();
           if (!args.o) {
@@ -81,8 +91,9 @@ const setPackageArgs = value => {
   args = value;
 };
 exports.setPackageArgs = setPackageArgs;
-const scanPackage = async (includeRemotes, includeDeps = true) => {
-  const pkg = await (0, _package.getPackage)();
+const scanPackage = async (includeRemotes, includeDeps = true, root = './') => {
+  const pkg = await (0, _package.getPackage)(root);
+  if (!pkg) throw new Error('package read failed!');
   const dependencies = Object.keys(pkg.dependencies || []);
   const devDependencies = Object.keys(pkg.devDependencies || []);
   const seen = {};
@@ -214,7 +225,7 @@ const launchTestServer = async (dir, port = 8084, test = "/test/test.cjs") => {
   //if(!require) require = mod.createRequire(import.meta.url);
   const app = (0, _express.default)();
   if (!modules) {
-    modules = (await scanPackage(true, args)).modules;
+    modules = (await scanPackage(true, args, dir)).modules;
   }
   app.get('/test/index.html', async (req, res) => {
     try {
@@ -294,7 +305,7 @@ const testHTML = async (testTag, options = {}) => {
         <html>
             <head>
                 <title>Moka Tests</title>
-                <base filesystem="${process.cwd()}" user="${os.userInfo().username}">
+                <base filesystem="${options.root || process.cwd()}" user="${os.userInfo().username}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n' + mapIndent) || ''}
                 <script type="module">
@@ -540,6 +551,9 @@ const configure = values => {
       //TODO: remove this magical global
       globalThis.handleDownload = values[key];
     }
+    if (key === 'write') {
+      (0, _file.addEventListener)('write', values[key]);
+    }
   });
 };
 exports.configure = configure;
@@ -572,7 +586,7 @@ const testRemote = (desc, testLogicFn, options) => {
         this.timeout(10000); //10s default
         const thisPort = defaultPort++;
         /*const server =*/
-        await launchTestServer('./', thisPort, options.testScripts && options.testScripts[0]);
+        await launchTestServer('../', thisPort, options.testScripts && options.testScripts[0]);
         if (!remotes[remoteName]) {
           throw new Error(`Remote '${remoteName}' was not found!`);
         }

@@ -15,6 +15,7 @@ import express from 'express';
 import * as mod from 'module';
 import * as os from 'os';
 import { getPackage } from '@environment-safe/package';
+import { Path, addEventListener } from '@environment-safe/file';
 import { mochaEventHandler } from '../src/index.mjs';
 let require = null;
 let resolve = null;
@@ -36,19 +37,27 @@ export const mochaTool = {
             return mocha.addFile(fileName);
         };
         const mocha = new Mocha();
+        let workingDir = null; //TODO: support multiple files in multiple locations
         mocha.tool = {
             addAllFiles : async ()=>{
                 const files = await resolveTestSet(args._);
                 const work = [];
+                let workingDir = null; //TODO: support multiple files in multiple locations
                 for(let lcv =0; lcv < files.length; lcv++){
                     work.push(addFile(mocha, files[lcv]));
+                    if(!workingDir) workingDir = Path.parent(files[lcv]);
                 }
-                
+                if(workingDir){
+                    process.chdir(workingDir);
+                }
                 await Promise.all(work);
                 await mocha.loadFilesAsync();
                 return files;
             },
             run : ()=>{
+                if(workingDir){
+                    process.chdir(workingDir);
+                }
                 mocha.run(function(failures){
                     
                     if(args.v || args.d) logRunningOnClose();
@@ -96,8 +105,9 @@ export const setPackageArgs = (value)=>{
 };
 
 
-export const scanPackage = async(includeRemotes, includeDeps=true)=>{
-    const pkg = await getPackage();
+export const scanPackage = async(includeRemotes, includeDeps=true, root='./')=>{
+    const pkg = await getPackage(root);
+    if(!pkg) throw new Error('package read failed!');
     const dependencies = Object.keys(pkg.dependencies || []);
     const devDependencies = Object.keys(pkg.devDependencies || []);
     const seen = {};
@@ -242,7 +252,7 @@ export const launchTestServer = async (dir, port=8084, test='/test/test.mjs')=>{
     //if(!require) require = mod.createRequire(import.meta.url);
     const app = express();
     if(!modules){
-        modules = (await scanPackage(true, args)).modules;
+        modules = (await scanPackage(true, args, dir)).modules;
     }
     app.get('/test/index.html', async (req, res)=>{
         try{
@@ -329,7 +339,7 @@ export const testHTML = async (testTag, options={})=>{
         <html>
             <head>
                 <title>Moka Tests</title>
-                <base filesystem="${process.cwd()}" user="${os.userInfo().username}">
+                <base filesystem="${options.root || process.cwd()}" user="${os.userInfo().username}">
                 ${mochaLink}
                 ${options.map.replace(/\n/g, '\n'+mapIndent) || ''}
                 <script type="module">
@@ -599,6 +609,9 @@ export const configure = (values)=>{
             //TODO: remove this magical global
             globalThis.handleDownload = values[key];
         }
+        if(key === 'write'){
+            addEventListener('write', values[key]);
+        }
     });
 };
 
@@ -641,7 +654,7 @@ export const testRemote = (desc, testLogicFn, options)=>{
             it(`🌎[${remoteName}] ${description}`, async function(){
                 this.timeout(10000); //10s default
                 const thisPort = defaultPort++;
-                /*const server =*/ await launchTestServer('./', thisPort, (
+                /*const server =*/ await launchTestServer('../', thisPort, (
                     options.testScripts && options.testScripts[0]
                 ));
                 if(!remotes[remoteName]){
