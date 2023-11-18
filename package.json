@@ -1,6 +1,6 @@
 {
     "name": "@open-automaton/moka",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "type": "module",
     "main": "dist/index.mjs",
     "module": "src/index.mjs",
@@ -123,7 +123,7 @@
         "@babel/generator": "^7.23.0",
         "@babel/parser": "^7.23.0",
         "@babel/traverse": "^7.23.0",
-        "@environment-safe/file": "^0.2.0",
+        "@environment-safe/file": "^0.3.0",
         "@environment-safe/import-introspect": "^0.1.0",
         "@environment-safe/package": "^0.1.2",
         "@environment-safe/runtime-context": "^0.0.1",
