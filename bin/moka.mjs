@@ -179,31 +179,37 @@ const resolveTestSet = (passed)=>{
                 return new Promise((resolve, reject)=>{
                     fs.readFile(file, async (err, body)=>{
                         if(err) return reject(err);
-                        const ast = parser.parse(body.toString(), {
-                            //todo: handle this for cross compile
-                            sourceType: 'module',
-                            plugins: [],
-                        });
-                        traverse(ast, {
-                            CallExpression(path) {
-                                if(path.node.callee.name === 'fixture'){
-                                    const name = path.node.arguments[0].value;
-                                    const settings = generator(path.node.arguments[1]).code;
-                                    let data = '{}';
-                                    eval('data = '+settings);
-                                    const json = JSON.stringify(data);
-                                    fixtureSet.push(new Promise(async (resolve, reject)=>{
-                                        if(args.v) console.log(`FIXTURE ${name} LAUNCHED`);
-                                        const ThisFixture = await getFixture(name);
-                                        const fixture = new ThisFixture(data);
-                                        fixture.name = name;
-                                        await fixture.ready;
-                                        resolve(fixture);
-                                    }));
+                        try{
+                            const ast = parser.parse(body.toString(), {
+                                //todo: handle this for cross compile
+                                sourceType: 'module',
+                                plugins: [
+                                    "importAssertions"
+                                ],
+                            });
+                            traverse(ast, {
+                                CallExpression(path) {
+                                    if(path.node.callee.name === 'fixture'){
+                                        const name = path.node.arguments[0].value;
+                                        const settings = generator(path.node.arguments[1]).code;
+                                        let data = '{}';
+                                        eval('data = '+settings);
+                                        const json = JSON.stringify(data);
+                                        fixtureSet.push(new Promise(async (resolve, reject)=>{
+                                            if(args.v) console.log(`FIXTURE ${name} LAUNCHED`);
+                                            const ThisFixture = await getFixture(name);
+                                            const fixture = new ThisFixture(data);
+                                            fixture.name = name;
+                                            await fixture.ready;
+                                            resolve(fixture);
+                                        }));
+                                    }
                                 }
-                            }
-                        });
-                        resolve();
+                            });
+                            resolve();
+                        }catch(ex){
+                            reject(ex)
+                        }
                     });
                 });
             }));
