@@ -123,7 +123,7 @@
         "@babel/generator": "^7.23.0",
         "@babel/parser": "^7.23.0",
         "@babel/traverse": "^7.23.0",
-        "@environment-safe/file": "^0.3.0",
+        "@environment-safe/file": "^0.3.2",
         "@environment-safe/import-introspect": "^0.1.0",
         "@environment-safe/package": "^0.1.2",
         "@environment-safe/runtime-context": "^0.0.1",
