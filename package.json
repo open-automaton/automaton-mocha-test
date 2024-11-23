@@ -1,6 +1,6 @@
 {
     "name": "@open-automaton/moka",
-    "version": "0.5.3",
+    "version": "0.5.4",
     "type": "module",
     "main": "dist/index.mjs",
     "module": "src/index.mjs",

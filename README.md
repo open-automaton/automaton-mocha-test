@@ -145,6 +145,9 @@ describe('environment tests', ()=>{
 });
 ```
 
+### Paths
+When using the `moka` executable, all paths originate from the test directory (mocha, browser and fixture) so they are consistent between environments.
+
 Running the suite
 -----------------
 

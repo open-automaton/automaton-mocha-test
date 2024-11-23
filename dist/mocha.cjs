@@ -336,6 +336,12 @@ const testHTML = async (testTag, options = {}) => {
 };
 exports.testHTML = testHTML;
 const counters = {};
+const useTestPath = async handler => {
+  process.chdir('./test');
+  return await handler(() => {
+    process.chdir('..');
+  });
+};
 class Fixture {
   static makePort(port) {
     if (!port) return 3000;
@@ -347,11 +353,22 @@ class Fixture {
     return parseInt(port);
   }
   constructor(options = {}) {
-    this.options = options;
-    this.ready = this.createFixture();
-    (async () => {
-      this.fixture = await this.ready;
-    })();
+    try {
+      this.options = options;
+      useTestPath(resetPath => {
+        this.ready = this.createFixture();
+        (async () => {
+          try {
+            this.fixture = await this.ready;
+          } catch (ex) {
+            console.log('ERRRR', ex);
+          }
+          resetPath();
+        })();
+      });
+    } catch (ex) {
+      console.log('ERRRR', ex);
+    }
   }
   async createFixture() {
     return await new Promise();
@@ -385,7 +402,9 @@ const fixture = (name, settings, cb) => {
 };
 exports.fixture = fixture;
 const fixturesLoaded = async () => {
-  Promise.all(fixtures.map(fixture => fixture.ready));
+  //process.chdir('./test'); //any files loaded should be relative to the execute dir
+  await Promise.all(fixtures.map(fixture => fixture.ready));
+  //process.chdir('..');
   return fixtures;
 };
 exports.fixturesLoaded = fixturesLoaded;
