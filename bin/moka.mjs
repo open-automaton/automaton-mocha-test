@@ -185,10 +185,11 @@ const resolveTestSet = (passed)=>{
             if(args.v) console.log('LAUNCHING FIXTURES', (new Error()).stack);
             const filesToAdd = resolveTestSet(args._);
             const fixtureSet = [];
-            await Promise.all(filesToAdd.map((path)=>{
-                const file = path.indexOf('file://') === 0?path.substring(7):path;
-                return new Promise((resolve, reject)=>{
-                    fs.readFile(file, async (err, body)=>{
+            //load fixtures sequentially to make pathing simpler
+            // 1) get the names of each fixture
+            for (const fileToAdd of filesToAdd) {
+                await new Promise((resolve, reject)=>{
+                    fs.readFile(fileToAdd, async (err, body)=>{
                         if(err) return reject(err);
                         try{
                             const ast = parser.parse(body.toString(), {
@@ -206,14 +207,11 @@ const resolveTestSet = (passed)=>{
                                         let data = '{}';
                                         eval('data = '+settings);
                                         const json = JSON.stringify(data);
-                                        fixtureSet.push(new Promise(async (resolve, reject)=>{
-                                            if(args.v) console.log(`FIXTURE ${name} LAUNCHED`);
-                                            const ThisFixture = await getFixture(name);
-                                            const fixture = new ThisFixture(data);
-                                            fixture.name = name;
-                                            await fixture.ready;
-                                            resolve(fixture);
-                                        }));
+                                        fixtureSet.push({
+                                            name,
+                                            data,
+                                            json
+                                        });
                                     }
                                 }
                             });
@@ -223,10 +221,24 @@ const resolveTestSet = (passed)=>{
                         }
                     });
                 });
-            }));
-            const readyFixtures = await Promise.all(fixtureSet);
+            }
+            //*
+            // 2) load each fixture, setting the root path while we do
+            let ThisFixture = null;
+            const readyFixtures = [];
+            for(let lcv = 0; lcv < fixtureSet.length; lcv++){
+                //await fixtureSet[lcv];
+                //*
+                ThisFixture = await getFixture(fixtureSet[lcv].name);
+                const fixture = new ThisFixture(fixtureSet[lcv].data);
+                readyFixtures.push(fixture);
+                await fixture.initialized;
+                fixture.name = fixtureSet[lcv].name;
+                await fixture.ready;
+                //*/
+            }
+            //3) set the full set of fixtures
             setFixtures(readyFixtures);
-            return readyFixtures;
         }
         let mocha = null;
         if(args.b){ //we're going to dummy the whole suite to the browser
@@ -353,7 +365,6 @@ const resolveTestSet = (passed)=>{
         }
         if(args.f){
             if(args.v) console.log('SAVING HTML');
-            console.log('SAVING HTML');
             const file = args.f.indexOf('file://') === 0?args.f.substring(7):args.f;
             await new Promise(async (resolve, reject)=>{
                 const body = await makeHTML();

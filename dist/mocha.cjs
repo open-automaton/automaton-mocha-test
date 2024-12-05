@@ -338,8 +338,12 @@ exports.testHTML = testHTML;
 const counters = {};
 const useTestPath = async handler => {
   process.chdir('./test');
-  return await handler(() => {
-    process.chdir('..');
+  // eslint-disable-next-line no-async-promise-executor
+  return new Promise(async (resolve, reject) => {
+    handler(() => {
+      process.chdir('..');
+      resolve();
+    });
   });
 };
 class Fixture {
@@ -355,7 +359,7 @@ class Fixture {
   constructor(options = {}) {
     try {
       this.options = options;
-      useTestPath(resetPath => {
+      this.initialized = useTestPath(resetPath => {
         this.ready = this.createFixture();
         (async () => {
           try {
